@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://dirty-checkers-darts.magtnb.workers.dev; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <title>Dirty Checkers Darts</title>
 <meta name="theme-color" content="#141415">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -247,9 +249,11 @@ async function loadLiga() {
   softRender();
 }
 async function refreshLiga() {
-  if (S.refreshing) return; S.refreshing = true; render();
+  if (S.refreshing) return;
+  if (!Store.key) { toast('Zum Aktualisieren bitte zuerst in den Einstellungen den App-Schlüssel eintragen.'); return }
+  S.refreshing = true; render();
   try {
-    const r = await fetch(API + '/liga/refresh', { method: 'POST' }); const j = await r.json();
+    const r = await fetch(API + '/liga/refresh', { method: 'POST', headers: { 'X-App-Key': Store.key } }); const j = await r.json();
     if (!r.ok) throw new Error(j.error || 'Fehler ' + r.status);
     LS.set('darts.liga', j); L = prepLiga(j); LIGA_ERR = false; toast(j.hinweis || 'Liga-Daten aktualisiert');
   } catch (e) { toast('Aktualisieren fehlgeschlagen: ' + (e.message || 'keine Verbindung')) }
@@ -869,6 +873,8 @@ function vSettings() {
     <section><h3>Geräte verbinden</h3><div class="note ${Store.state === 'ok' ? '' : 'warn'}">${st}${Store.outbox.length ? ` (${Store.outbox.length} noch nicht übertragen)` : ''}</div>
       <label class="f">App-Schlüssel<div class="row"><input type="password" id="appkey" class="grow" value="${esc(Store.key)}" autocomplete="off" placeholder="Schlüssel eingeben"><button class="btn primary" data-act="saveKey">Verbinden</button></div></label>
       <p class="muted small" style="margin:0">Trag auf jedem Gerät denselben Schlüssel ein, dann siehst du überall dieselben Spieler, Spiele und Trainings.</p></section>
+    <section><h3>Datensicherung</h3><p class="muted" style="margin:0">Speichert alle Spieler, Spiele und Trainings als Datei auf diesem Gerät. Mit „Sicherung einspielen“ holst du sie zurück. Vorhandenes bleibt dabei erhalten.</p>
+      <div class="row"><button class="btn grow" data-act="exportData">Daten exportieren</button><label class="btn grow" style="text-align:center;cursor:pointer">Sicherung einspielen<input type="file" id="importfile" accept=".json,application/json" data-chg="import" hidden></label></div></section>
     <section><h3>Mein Team</h3><select id="myteam" data-chg="myteam">${(L ? L.teams : [{ name: S.team }]).map(t => `<option ${t.name === S.team ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></section>
     <section><h3>Auf den Homescreen</h3><p class="muted" style="margin:0">iPhone: in Safari auf Teilen tippen, dann „Zum Home-Bildschirm“. Android: im Chrome-Menü „App installieren“ oder „Zum Startbildschirm hinzufügen“.</p></section>
     <section><h3>Liga-Daten</h3><p class="muted" style="margin:0">${L ? 'Stand ' + new Date(L.aktualisiert).toLocaleString('de-AT') + '. ' : ''}Werden täglich automatisch geholt, donnerstags und freitags zusätzlich abends. Mit dem Pfeil oben rechts jederzeit sofort.</p></section>`;
@@ -963,6 +969,14 @@ const A = {
   rename: d => { const n = $('#rename').value.trim(); if (!n) return; Store.put('profiles', d.v, { ...clone(Store.data.profiles[d.v]), name: n }); toast('Gespeichert') },
   delAsk: d => S.delAsk = d.v, delNo: () => S.delAsk = null,
   delYes: d => { Store.del('profiles', d.v); S.setup.players = S.setup.players.filter(x => x !== d.v); LS.set('darts.setup', S.setup); S.statPid = null; S.delAsk = null; toast('Spieler gelöscht') },
+  exportData: () => {
+    const data = { app: 'dirty-checkers-darts', exportiert: new Date().toISOString(), profiles: Store.data.profiles, matches: Store.data.matches, trainings: Store.data.trainings };
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+    a.download = 'darts-sicherung-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast('Sicherung gespeichert');
+  },
   saveKey: () => { Store.key = $('#appkey').value.trim(); LS.set('darts.key', Store.key); Store.state = 'lokal'; Store.sync().then(() => { render(); toast(Store.state === 'ok' ? 'Verbunden' : Store.state === 'badkey' ? 'Schlüssel stimmt nicht' : 'Keine Verbindung') }) }
 };
 document.addEventListener('click', e => {
@@ -974,6 +988,15 @@ document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.chg === 'wdvlink') { const pid = el.dataset.v; Store.put('profiles', pid, { ...clone(Store.data.profiles[pid]), wdv: el.value || null }); toast(el.value ? 'Verknüpft mit ' + el.value : 'Verknüpfung entfernt'); render() }
   if (el.dataset.chg === 'myteam') { A.setTeam({ v: el.value }); render() }
+  if (el.dataset.chg === 'import' && el.files[0]) {
+    el.files[0].text().then(t => {
+      const d = JSON.parse(t); if (d.app !== 'dirty-checkers-darts') throw 0;
+      let n = 0;
+      COLS.forEach(c => Object.entries(d[c] || {}).forEach(([id, obj]) => { if (/^[\w-]{1,64}$/.test(id) && obj && typeof obj === 'object' && !Store.data[c][id]) { Store.put(c, id, obj); n++ } }));
+      toast(n ? n + ' Einträge eingespielt' : 'Alles war schon vorhanden'); render();
+    }).catch(() => toast('Das ist keine gültige Darts-Sicherung.'));
+    el.value = '';
+  }
 });
 document.addEventListener('keydown', e => {
   if (e.target.id === 'newp' && e.key === 'Enter') { A.addProfile(); render() }
