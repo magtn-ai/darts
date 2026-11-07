@@ -1,0 +1,997 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Dirty Checkers Darts</title>
+<meta name="theme-color" content="#141415">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Darts">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: dunkles Terminal, eine kompakte Spalte, Tonstufen statt Schatten, Tab-Leiste unten */
+:root{
+  --void:#080809; --obsidian:#141415; --charcoal:#1b1d1f; --graphite:#26272d; --slate:#3c3d40; --iron:#34353c;
+  --fog:#acadae; --paper:#ffffff; --ice:#83c3ff; --neg:#e24756;
+  --ice-08:rgba(131,195,255,.08); --ice-20:rgba(131,195,255,.2); --neg-15:rgba(226,71,86,.16); --ring:inset 0 0 0 1px rgba(255,255,255,.08);
+  --f-ui:Inter,"Segoe UI",system-ui,sans-serif; --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  --r-sm:4px; --r-lg:8px; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);background:var(--void)}
+body{margin:0;background:var(--void);color:var(--paper);font-family:var(--f-ui);font-size:14px;line-height:1.5;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-bottom:calc(72px + env(safe-area-inset-bottom,0px));-webkit-tap-highlight-color:transparent}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--obsidian)}
+[hidden]{display:none!important}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+button:disabled{opacity:.4;cursor:default}
+:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+.wrap{max-width:720px;margin:0 auto}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--obsidian);margin:0 calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding:10px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));display:flex;align-items:center;gap:12px}
+.brand{font-weight:600;font-size:16px;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+.brand i{width:10px;height:10px;border-radius:50%;border:2px solid var(--ice);display:inline-block}
+.stamp{font-family:var(--f-mono);font-size:12px;color:var(--fog);margin-left:auto;text-align:right;line-height:1.25}
+.ibtn{width:36px;height:36px;border-radius:var(--r-sm);border:1px solid var(--iron);background:transparent;display:grid;place-items:center;flex:none}
+.ibtn svg{width:18px;height:18px;fill:none;stroke:var(--paper);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ibtn.spin svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+h1,h2,h3{margin:0;font-weight:500;text-wrap:balance;line-height:1.25}
+h2{font-size:24px;letter-spacing:-.01em}
+h3{font-size:12px;font-weight:500;color:var(--fog);text-transform:uppercase;letter-spacing:.08em}
+main{display:flex;flex-direction:column;gap:32px;padding-block:16px 32px}
+section{display:flex;flex-direction:column;gap:12px;min-width:0}
+.muted{color:var(--fog)} .small{font-size:12px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.card{background:var(--charcoal);box-shadow:var(--ring);border-radius:var(--r-lg);padding:12px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{height:30px;border:1px solid var(--iron);background:transparent;border-radius:var(--r-sm);padding:0 10px;font-size:14px;font-weight:500;white-space:nowrap}
+.chip.on{border-color:var(--ice);background:var(--ice-08);color:var(--paper)}
+.seg{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.seg::-webkit-scrollbar{display:none}
+.seg button{height:30px;border:1px solid var(--iron);background:transparent;border-radius:var(--r-sm);padding:0 10px;font-size:14px;font-weight:500;white-space:nowrap;color:var(--fog)}
+.seg button.on{border-color:var(--ice);color:var(--paper);background:var(--ice-08)}
+.btn{border:1px solid var(--iron);background:transparent;border-radius:var(--r-sm);padding:10px 16px;font-weight:500;font-size:14px}
+.btn.primary{border-color:var(--ice)}
+.btn.primary:hover{border-color:var(--paper)}
+.btn.danger{border-color:var(--neg);color:var(--neg)}
+.btn.block{width:100%}
+.btn.big{padding:14px 16px;font-size:16px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grow{flex:1;min-width:0}
+input[type=text],input[type=password],select{height:40px;border:1px solid var(--iron);background:var(--charcoal);border-radius:var(--r-sm);padding:0 12px;min-width:0}
+input::placeholder{color:var(--fog)}
+label.f{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--fog)}
+.link{border:0;background:none;color:var(--ice);font-weight:500;padding:0;align-self:flex-start;font-size:14px}
+.tbl{overflow-x:auto;border-radius:var(--r-lg);background:var(--charcoal);box-shadow:var(--ring)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 10px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--iron)}
+th{font-size:12px;color:var(--fog);font-weight:500}
+td.n{font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right}
+td.c,th.c{text-align:center} th.r{text-align:right}
+tr:last-child td{border-bottom:0}
+tr.me td{background:var(--ice-08)}
+tr.me td:first-child{box-shadow:inset 2px 0 0 var(--ice)}
+tr.tap{cursor:pointer}
+tr.tap:hover td{background:rgba(60,61,64,.5)}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.kpi{background:var(--charcoal);box-shadow:var(--ring);border-radius:var(--r-lg);padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.kpi b{font-family:var(--f-mono);font-size:20px;font-weight:500;line-height:1.25;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi span{font-size:12px;color:var(--fog)}
+.pill{display:inline-grid;place-items:center;min-width:22px;height:20px;border-radius:var(--r-sm);font-size:12px;font-weight:600;font-family:var(--f-mono)}
+.pill.w{background:var(--ice-20);color:var(--ice)} .pill.l{background:var(--neg-15);color:var(--neg)} .pill.d{background:var(--graphite);color:var(--fog)}
+.list{display:flex;flex-direction:column;background:var(--charcoal);box-shadow:var(--ring);border-radius:var(--r-lg);overflow:hidden}
+.li{display:flex;align-items:center;gap:10px;padding:0 12px;min-height:48px;border:0;border-bottom:1px solid var(--iron);background:none;width:100%;text-align:left;min-width:0}
+.li:last-child{border-bottom:0}
+button.li:hover{background:rgba(60,61,64,.5)}
+.li.sel{box-shadow:inset 2px 0 0 var(--ice);background:var(--ice-08)}
+.li .grow{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.li .two{white-space:normal;padding-block:8px}
+.score{font-family:var(--f-mono);font-weight:500;font-size:16px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.next{background:var(--graphite);box-shadow:var(--ring);border-radius:var(--r-lg);padding:12px;display:flex;flex-direction:column;gap:4px}
+.next .vs{font-size:20px;font-weight:500;line-height:1.25}
+.cap{font-family:var(--f-mono);font-size:12px;color:var(--fog)}
+.chart{width:100%;height:auto;display:block}
+.chart .grid{stroke:var(--iron);stroke-width:1}
+.chart .ax{fill:var(--fog);font-size:12px;font-family:var(--f-mono)}
+.chart .ln{fill:none;stroke:var(--ice);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.chart .ar{fill:var(--ice);opacity:.1}
+.chart .pt{fill:var(--ice)} .chart .end{fill:var(--void);stroke:var(--ice);stroke-width:2.5}
+.chart .goal{stroke:var(--fog);stroke-width:1;stroke-dasharray:4 4}
+.good{color:var(--ice)}
+.chart .lbl{fill:var(--paper);font-size:13px;font-weight:500;font-family:var(--f-mono)}
+.heat td.v{font-family:var(--f-mono);text-align:center;font-size:13px}
+.h1{background:var(--neg-15)}.h2{background:var(--ice-08)}.h3{background:var(--ice-20);color:var(--paper)}
+/* Scoreboard */
+.board{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+.pl{background:var(--charcoal);box-shadow:var(--ring);border-radius:var(--r-lg);padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.pl.act{box-shadow:inset 0 0 0 1px var(--ice);background:var(--graphite)}
+.pl .nm{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl .rem{font-family:var(--f-mono);font-weight:500;font-size:52px;line-height:1.05;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+.pl .sub{font-size:12px;color:var(--fog);display:flex;gap:10px;flex-wrap:wrap;font-family:var(--f-mono)}
+.pl .co{font-family:var(--f-mono);font-size:13px;color:var(--ice);min-height:20px}
+.darts{display:flex;gap:8px;min-height:34px}
+.darts span{min-width:56px;text-align:center;border:1px dashed var(--iron);border-radius:var(--r-sm);padding:4px 6px;font-family:var(--f-mono);font-size:16px;font-weight:500}
+.darts span.f{border-style:solid;background:var(--graphite)}
+.pad{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.pad button{border:1px solid var(--iron);background:var(--charcoal);border-radius:var(--r-sm);height:52px;font-family:var(--f-mono);font-size:18px;font-weight:500}
+.pad button:active{background:var(--slate)}
+.pad .wide{grid-column:span 2}
+.pad .mods{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pad .mods button{font-family:var(--f-ui);font-size:15px;height:44px}
+.pad .mods button.on{border-color:var(--paper);background:var(--slate)}
+.pad .mods button.d.on{border-color:var(--ice);color:var(--ice);background:var(--ice-08)}
+.pad .mods button.t.on{border-color:var(--neg);color:var(--neg);background:var(--neg-15)}
+.pad .act{background:var(--graphite)}
+.pad.np{grid-template-columns:repeat(3,1fr)}
+.pad .ok{border-color:var(--ice);color:var(--ice)}
+.entry{font-family:var(--f-mono);font-size:40px;font-weight:500;text-align:center;background:var(--charcoal);box-shadow:var(--ring);border-radius:var(--r-lg);padding:4px;min-height:60px;font-variant-numeric:tabular-nums}
+.quick{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.quick button{border:1px solid var(--iron);background:transparent;border-radius:var(--r-sm);height:36px;font-family:var(--f-mono);font-size:14px}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.tbig{font-family:var(--f-mono);font-size:64px;font-weight:500;line-height:1;text-align:center;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+.tbtns{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
+.tbtns button{height:64px;font-size:16px;font-weight:500;border-radius:var(--r-sm);border:1px solid var(--iron);background:var(--charcoal)}
+.tbtns .hit{border-color:var(--ice);color:var(--ice);background:var(--ice-08)}
+.tbtns .miss{background:var(--graphite);color:var(--fog)}
+.note{background:var(--graphite);box-shadow:var(--ring);border-radius:var(--r-lg);padding:10px 12px;font-size:14px}
+.note.warn{box-shadow:inset 0 0 0 1px var(--neg)}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--obsidian);border-top:1px solid var(--iron);display:grid;grid-template-columns:repeat(4,1fr);padding:0 max(8px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(8px,env(safe-area-inset-left,0px))}
+nav.tabs button{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;font-weight:500;color:var(--fog);padding:8px 0;box-shadow:inset 0 2px 0 transparent}
+nav.tabs button.on{color:var(--paper);box-shadow:inset 0 2px 0 var(--ice)}
+nav.tabs button.on svg{stroke:var(--ice)}
+nav.tabs svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+#toast{position:fixed;left:50%;bottom:calc(80px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--graphite);box-shadow:var(--ring);color:var(--paper);padding:10px 14px;border-radius:var(--r-lg);font-size:14px;z-index:20;max-width:90vw}
+.set{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--iron)}
+.set:last-child{border-bottom:0}
+.set .h{min-width:0}.set .g{text-align:right;min-width:0}
+.legs{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.set .g .legs{justify-content:flex-end}
+.legs i{font-style:normal;font-family:var(--f-mono);font-size:12px;padding:0 5px;border-radius:var(--r-sm);background:var(--graphite);color:var(--fog)}
+.legs i.w{background:var(--ice-20);color:var(--ice)}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><i></i>Dirty Checkers</div>
+    <div class="stamp" id="stamp"></div>
+    <button class="ibtn" id="refreshBtn" data-act="refreshLiga" aria-label="Liga-Daten aktualisieren"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+    <button class="ibtn" data-act="tab" data-t="settings" aria-label="Einstellungen"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+  </header>
+  <main id="app"><section><h2>Lade …</h2></section></main>
+</div>
+<nav class="tabs" id="nav">
+  <button data-act="tab" data-t="liga"><svg viewBox="0 0 24 24"><path d="M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8"/></svg>Liga</button>
+  <button data-act="tab" data-t="spielen"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></svg>Spielen</button>
+  <button data-act="tab" data-t="training"><svg viewBox="0 0 24 24"><path d="M4 20l6-6M14 4l6 6-8 8-6-6z"/><path d="M15 9l-3 3"/></svg>Training</button>
+  <button data-act="tab" data-t="stats"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Statistik</button>
+</nav>
+<div id="toast" hidden></div>
+
+<script>
+// Adresse des Cloudflare-Helfers (wird beim Einrichten eingetragen)
+const API = 'https://dirty-checkers-darts.magtnb.workers.dev';
+
+// ---------- Helfer
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const fmt = (n, d = 1) => n == null || !isFinite(n) ? '–' : n.toFixed(d).replace('.', ',');
+const pct = (a, b) => b ? fmt(a / b * 100, 0) + ' %' : '–';
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d } catch { return d } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} },
+  del(k) { try { localStorage.removeItem(k) } catch {} }
+};
+const clone = o => JSON.parse(JSON.stringify(o));
+const pDate = s => { const [d, m, y] = s.split('.'); return new Date(+y, m - 1, +d) };
+const dShort = ts => new Date(ts).toLocaleDateString('de-AT', { day: '2-digit', month: '2-digit' });
+let toastT;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2800) }
+
+// ---------- Speicher: Spieler, Spiele, Trainings – lokal sofort, dann über den Helfer auf alle Geräte
+const COLS = ['profiles', 'matches', 'trainings'];
+const Store = {
+  data: { profiles: {}, matches: {}, trainings: {} }, key: LS.get('darts.key', ''), state: 'lokal', outbox: LS.get('darts.outbox', []), flushing: false,
+  init() { COLS.forEach(c => this.data[c] = LS.get('darts.' + c, {})); this.sync() },
+  async sync() {
+    if (!this.key) { this.state = 'nokey'; softRender(); return }
+    try {
+      await this.flush();
+      const r = await fetch(API + '/data', { headers: { 'X-App-Key': this.key } });
+      if (r.status === 401) { this.state = 'badkey'; softRender(); return }
+      if (!r.ok) throw 0;
+      const d = await r.json();
+      COLS.forEach(c => this.data[c] = d[c] || {});
+      this.outbox.forEach(o => { if (o.op === 'put') this.data[o.c][o.id] = o.obj; else delete this.data[o.c][o.id] });
+      COLS.forEach(c => LS.set('darts.' + c, this.data[c]));
+      this.state = 'ok';
+    } catch { this.state = 'offline' }
+    softRender();
+  },
+  async flush() {
+    if (this.flushing || !this.key) return; this.flushing = true;
+    try {
+      while (this.outbox.length) {
+        const o = this.outbox[0];
+        const r = await fetch(`${API}/data/${o.c}/${o.id}`, { method: o.op === 'put' ? 'PUT' : 'DELETE', headers: { 'X-App-Key': this.key, 'Content-Type': 'application/json' }, body: o.op === 'put' ? JSON.stringify(o.obj) : undefined });
+        if (r.status === 401) { this.state = 'badkey'; break }
+        if (!r.ok) throw 0;
+        this.outbox.shift(); LS.set('darts.outbox', this.outbox);
+      }
+    } finally { this.flushing = false }
+  },
+  queue(o) { this.outbox = this.outbox.filter(x => !(x.c === o.c && x.id === o.id)); this.outbox.push(o); LS.set('darts.outbox', this.outbox); this.flush().catch(() => { this.state = 'offline' }) },
+  list(c) { return Object.entries(this.data[c]).map(([id, v]) => ({ ...v, id })) },
+  put(c, id, obj) { this.data[c] = { ...this.data[c], [id]: obj }; LS.set('darts.' + c, this.data[c]); this.queue({ op: 'put', c, id, obj }) },
+  del(c, id) { const o = { ...this.data[c] }; delete o[id]; this.data[c] = o; LS.set('darts.' + c, o); this.queue({ op: 'del', c, id }) }
+};
+const profiles = () => Store.list('profiles').sort((a, b) => a.name.localeCompare(b.name, 'de'));
+const pname = id => (Store.data.profiles[id] || {}).name || 'Unbekannt';
+
+// ---------- Liga-Daten
+let L = null, LIGA_ERR = false;
+async function loadLiga() {
+  const c = LS.get('darts.liga', null); if (c) L = prepLiga(c);
+  softRender();
+  try { const r = await fetch(API + '/liga', { cache: 'no-store' }); if (r.ok) { const j = await r.json(); LS.set('darts.liga', j); L = prepLiga(j); LIGA_ERR = false } else if (!L) LIGA_ERR = true }
+  catch { if (!L) LIGA_ERR = true }
+  softRender();
+}
+async function refreshLiga() {
+  if (S.refreshing) return; S.refreshing = true; render();
+  try {
+    const r = await fetch(API + '/liga/refresh', { method: 'POST' }); const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Fehler ' + r.status);
+    LS.set('darts.liga', j); L = prepLiga(j); LIGA_ERR = false; toast(j.hinweis || 'Liga-Daten aktualisiert');
+  } catch (e) { toast('Aktualisieren fehlgeschlagen: ' + (e.message || 'keine Verbindung')) }
+  S.refreshing = false; render();
+}
+function prepLiga(raw) {
+  raw = clone(raw);
+  const roundOf = {}, spielOf = {};
+  raw.spiele.forEach(s => { roundOf[s.heim + '|' + s.gast] = s.runde; spielOf[s.heim + '|' + s.gast] = s });
+  const wdv = {}; raw.spieler.forEach(p => wdv[p.name] = p);
+  const P = {};
+  const get = (n, team) => P[n] || (P[n] = { name: n, team, sing: 0, singW: 0, dbl: 0, dblW: 0, legs: 0, legsW: 0, darts: 0, pts: 0, best: null, rounds: {} });
+  raw.berichte.forEach(b => {
+    b.runde = roundOf[b.heim + '|' + b.gast] || 0;
+    b.spiel = spielOf[b.heim + '|' + b.gast];
+    b.sets.forEach(s => ['heim', 'gast'].forEach(side => {
+      const me = s[side], op = s[side === 'heim' ? 'gast' : 'heim'], team = b[side];
+      const won = me.gewonnen > op.gewonnen;
+      if (s.typ === 'doppel') { me.spieler.forEach(n => { const p = get(n, team); p.dbl++; if (won) p.dblW++ }); return }
+      const n = me.spieler[0]; if (!n) return;
+      const p = get(n, team); p.team = team; p.sing++; if (won) p.singW++;
+      const R = p.rounds[b.runde] || (p.rounds[b.runde] = { darts: 0, pts: 0, legs: 0, legsW: 0, gegner: [] });
+      R.gegner.push({ name: op.spieler[0], won, score: me.gewonnen + ':' + op.gewonnen });
+      me.legs.forEach(([d, r]) => {
+        p.legs++; p.darts += d; p.pts += 501 - r; R.legs++; R.darts += d; R.pts += 501 - r;
+        if (r === 0) { p.legsW++; R.legsW++; p.best = p.best == null ? d : Math.min(p.best, d) }
+      });
+    }));
+  });
+  Object.values(P).forEach(p => {
+    p.avg = p.darts ? p.pts / p.darts * 3 : null;
+    const w = wdv[p.name] || {}; p.pass = w.pass; p.s180 = w.s180 || 0; p.hifi = (w.hifi || []).length ? Math.max(...w.hifi) : null;
+    Object.values(p.rounds).forEach(R => R.avg = R.darts ? R.pts / R.darts * 3 : null);
+  });
+  return { ...raw, wdv, players: Object.values(P), byName: P };
+}
+const teamPlayers = t => L.players.filter(p => p.team === t).sort((a, b) => (b.avg || 0) - (a.avg || 0));
+const teamRow = t => L.tabelle.find(r => r.team === t);
+const teamInfo = t => L.teams.find(x => x.name === t) || {};
+const playedRounds = () => [...new Set(L.spiele.filter(s => s.setsH != null).map(s => s.runde))].sort((a, b) => a - b);
+const resPill = (s, team) => {
+  if (s.setsH == null) return '';
+  const my = s.heim === team ? s.setsH : s.setsG, ot = s.heim === team ? s.setsG : s.setsH;
+  return my > ot ? '<span class="pill w">S</span>' : my < ot ? '<span class="pill l">N</span>' : '<span class="pill d">U</span>';
+};
+const heatCls = a => a == null ? '' : a >= 48 ? 'h3' : a >= 40 ? 'h2' : 'h1';
+
+// ---------- Zustand
+const S = {
+  tab: LS.get('darts.tab', 'liga'), liga: 'team', team: LS.get('darts.team', 'An Sporran Dirty Checkers'), viewTeam: null,
+  round: null, report: null, lplayer: null, lsort: 'avg', lfilter: 'alle', refreshing: false,
+  setup: LS.get('darts.setup', { players: [], type: 'x01', start: 501, legs: 2, out: 'double', input: 'dart' }),
+  live: LS.get('darts.live', null), mod: 'S', entry: '', ask: null, abortAsk: false,
+  plan: LS.get('darts.plan', null), planAbortAsk: false,
+  tr: LS.get('darts.trlive', null), trSel: 'atc', trVar: null, trPid: null,
+  statPid: null, manage: false, delAsk: null, statMatch: null
+};
+if (S.tab === 'settings') S.tab = 'liga';
+const saveLive = () => LS.set('darts.live', S.live);
+const saveTr = () => LS.set('darts.trlive', S.tr);
+
+// ---------- X01 / Cricket
+const dartVal = d => d === 'M' ? 0 : ({ S: 1, D: 2, T: 3 }[d[0]]) * +d.slice(1);
+const dLabel = d => d === 'M' ? '0' : d === 'D25' ? 'Bull' : d === 'S25' ? '25' : d;
+const curLeg = m => m.legs[m.legs.length - 1];
+const turnOf = (m, leg) => (leg.starter + leg.visits.length) % m.players.length;
+const legsWon = m => { const w = m.players.map(() => 0); m.legs.forEach(l => { if (l.winner != null) w[l.winner]++ }); return w };
+const remOf = (m, leg, pi) => m.start - leg.visits.filter(v => v.p === pi && !v.bust).reduce((a, v) => a + v.score, 0);
+const BOGEY = [159, 162, 163, 165, 166, 168, 169];
+const BAD_VISIT = [163, 166, 169, 172, 173, 175, 176, 178, 179];
+
+// Checkout-Vorschlag: wenigste Darts, dann bevorzugte Doppel (D20, D16, D8 …) und Setup-Würfe
+const SETUP = []; for (let n = 20; n >= 1; n--) SETUP.push('T' + n); SETUP.push('D25', 'S25'); for (let n = 20; n >= 1; n--) SETUP.push('S' + n); for (let n = 20; n >= 1; n--) SETUP.push('D' + n);
+const DBL = [20, 16, 8, 18, 12, 10, 14, 4, 6, 2, 19, 17, 15, 13, 11, 9, 7, 5, 3, 1].map(n => 'D' + n).concat('D25');
+const coMemo = {};
+function checkout(rem, darts = 3) {
+  const k = rem + '/' + darts; if (k in coMemo) return coMemo[k];
+  let best = null, bc = 1e9;
+  if (rem >= 2 && rem <= 170) for (let n = 1; n <= darts && !best; n++) {
+    const rec = (left, depth, path, cost) => {
+      if (depth === n - 1) { const i = DBL.findIndex(d => dartVal(d) === left); if (i >= 0 && cost + i * 2 < bc) { bc = cost + i * 2; best = [...path, DBL[i]] } return }
+      SETUP.forEach((s, i) => { const v = dartVal(s); if (v < left - 1) rec(left - v, depth + 1, [...path, s], cost + i) });
+    };
+    rec(rem, 0, [], 0);
+  }
+  return coMemo[k] = best;
+}
+function newMatch(cfg) {
+  return { id: uid(), type: cfg.type, start: cfg.start, out: cfg.out, legsToWin: cfg.legs, input: cfg.type === 'cricket' ? 'dart' : cfg.input,
+    players: [...cfg.players], legs: [{ starter: 0, winner: null, visits: [] }], pending: [], pendAtts: [], winner: null, createdAt: Date.now() };
+}
+function x01Dart(m, d) {
+  const leg = curLeg(m), p = turnOf(m, leg);
+  const before = remOf(m, leg, p) - m.pending.reduce((a, x) => a + dartVal(x), 0);
+  const after = before - dartVal(d), dbl = d[0] === 'D';
+  const att = m.out !== 'single' && (before === 50 || (before <= 40 && before % 2 === 0)) ? 1 : 0;
+  m.pending.push(d); m.pendAtts.push(att);
+  const bust = after < 0 || (m.out !== 'single' && after === 1) || (after === 0 && m.out === 'double' && !dbl) || (after === 0 && m.out === 'master' && !(dbl || d[0] === 'T'));
+  if (bust) { toast('Überworfen'); return commitVisit(m, true, false) }
+  if (after === 0) return commitVisit(m, false, true);
+  if (m.pending.length === 3) return commitVisit(m, false, false);
+  saveLive();
+}
+function crState(m, leg, withPending) {
+  const st = { marks: m.players.map(() => ({ 20: 0, 19: 0, 18: 0, 17: 0, 16: 0, 15: 0, 25: 0 })), pts: m.players.map(() => 0) };
+  leg.visits.forEach(v => v.darts.forEach(d => crApply(st, v.p, d)));
+  if (withPending) m.pending.forEach(d => crApply(st, turnOf(m, leg), d));
+  return st;
+}
+function crApply(st, p, d) {
+  if (d === 'M') return; const num = +d.slice(1), mult = { S: 1, D: 2, T: 3 }[d[0]];
+  if (!(num in st.marks[p])) return;
+  const used = Math.min(mult, Math.max(0, 3 - st.marks[p][num])), extra = mult - used;
+  if (extra > 0 && st.marks.some((mm, q) => q !== p && mm[num] < 3)) st.pts[p] += extra * num;
+  st.marks[p][num] += mult;
+}
+const crClosed = mk => [20, 19, 18, 17, 16, 15, 25].every(n => mk[n] >= 3);
+function crDart(m, d) {
+  const leg = curLeg(m), p = turnOf(m, leg);
+  m.pending.push(d); m.pendAtts.push(0);
+  const st = crState(m, leg, true);
+  if (crClosed(st.marks[p]) && st.pts[p] >= Math.max(...st.pts)) return commitVisit(m, false, true);
+  if (m.pending.length === 3) return commitVisit(m, false, false);
+  saveLive();
+}
+const crMarks = d => { if (d === 'M') return 0; const n = +d.slice(1); return (n >= 15 && n <= 20) || n === 25 ? { S: 1, D: 2, T: 3 }[d[0]] : 0 };
+function commitVisit(m, bust, co) {
+  const leg = curLeg(m), p = turnOf(m, leg), darts = [...m.pending];
+  const score = bust ? 0 : darts.reduce((a, x) => a + dartVal(x), 0);
+  leg.visits.push({ p, darts, atts: [...m.pendAtts], score, bust, n: darts.length, att: m.pendAtts.reduce((a, b) => a + b, 0), co });
+  m.pending = []; m.pendAtts = [];
+  if (co) endLeg(m, p); else saveLive();
+}
+function x01Visit(m, score, n) {
+  const leg = curLeg(m), p = turnOf(m, leg), after = remOf(m, leg, p) - score;
+  if (after === 0) { leg.visits.push({ p, darts: null, score, bust: false, n, att: 0, co: true }); return endLeg(m, p) }
+  const bust = after < 0 || (m.out !== 'single' && after === 1);
+  leg.visits.push({ p, darts: null, score: bust ? 0 : score, bust, n: 3, att: 0, co: false });
+  if (bust) toast('Überworfen');
+  saveLive();
+}
+function endLeg(m, p) {
+  const leg = curLeg(m); leg.winner = p;
+  if (legsWon(m)[p] >= m.legsToWin) { m.winner = p; m.finishedAt = Date.now(); finishMatch(m) }
+  else { m.legs.push({ starter: (leg.starter + 1) % m.players.length, winner: null, visits: [] }); toast(pname(m.players[p]) + ' gewinnt das Leg'); saveLive() }
+}
+function undoMatch(m) {
+  if (m.pending.length) { m.pending.pop(); m.pendAtts.pop(); return saveLive() }
+  let leg = curLeg(m);
+  if (!leg.visits.length && m.legs.length > 1) { m.legs.pop(); leg = curLeg(m); leg.winner = null }
+  const v = leg.visits.pop(); if (!v) return;
+  if (v.co) leg.winner = null;
+  if (v.darts && v.darts.length) { m.pending = v.darts.slice(0, -1); m.pendAtts = (v.atts || []).slice(0, -1) }
+  saveLive();
+}
+function matchStats(m) {
+  return m.players.map((pid, pi) => {
+    const s = { pid, pts: 0, darts: 0, f9p: 0, f9d: 0, s180: 0, s140: 0, s100: 0, hi: 0, best: null, att: 0, hit: 0, legsW: 0, marks: 0 };
+    m.legs.forEach(l => {
+      let legD = 0;
+      l.visits.filter(v => v.p === pi).forEach((v, i) => {
+        s.darts += v.n; legD += v.n;
+        if (m.type === 'cricket') { s.marks += v.darts.reduce((a, d) => a + crMarks(d), 0); return }
+        s.pts += v.score; if (i < 3) { s.f9p += v.score; s.f9d += v.n }
+        if (v.score === 180) s.s180++; else if (v.score >= 140) s.s140++; else if (v.score >= 100) s.s100++;
+        s.att += v.att || 0;
+        if (v.co) { s.hi = Math.max(s.hi, v.score); if (v.darts) s.hit++ }
+      });
+      if (l.winner === pi) { s.legsW++; s.best = s.best == null ? legD : Math.min(s.best, legD) }
+    });
+    s.avg = m.type === 'x01' && s.darts ? s.pts / s.darts * 3 : null;
+    s.f9 = s.f9d ? s.f9p / s.f9d * 3 : null;
+    s.mpr = m.type === 'cricket' && s.darts ? s.marks / s.darts * 3 : null;
+    return s;
+  });
+}
+function finishMatch(m) {
+  const doc = clone(m); delete doc.pending; delete doc.pendAtts;
+  doc.stats = matchStats(m); doc.date = Date.now();
+  Store.put('matches', m.id, doc);
+  m.done = true; saveLive();
+}
+
+// ---------- Trainingsmodi (neue Modi hier ergänzen)
+const DBL_ROT = [20, 16, 8, 18, 12, 10, 14, 4, 6, 2, 19, 17, 15, 13, 11, 9, 7, 5, 3, 1, 25];
+const TR = {
+  atc: { name: 'Around the Clock', desc: 'Triff 1 bis 20 der Reihe nach, zum Schluss Bull. Gezählt werden die Darts bis ins Ziel.', unit: 'Darts', better: 'low',
+    variants: [['any', 'Beliebiges Segment'], ['D', 'Nur Doppel'], ['T', 'Nur Triple']], init: () => ({ t: 1, darts: 0, hits: 0 }) },
+  bobs: { name: "Bob's 27", desc: 'Start mit 27 Punkten. Pro Doppel (D1 bis Bull) 3 Darts: Treffer bringen den Doppelwert, kein Treffer zieht ihn ab. Unter 0 ist Schluss.', unit: 'Punkte', better: 'high',
+    init: () => ({ i: 0, score: 27 }) },
+  c121: { name: '121 Checkout', desc: '10 Versuche mit je 9 Darts. Geschafft heißt: nächstes Ziel +1. Nicht geschafft: das Ziel bleibt.', unit: 'Checkouts', better: 'high',
+    init: () => ({ target: 121, n: 0, succ: 0, best: 121 }) },
+  scoring: { name: 'Scoring', desc: 'Nur auf Punkte werfen. Gib jede Aufnahme ein, am Ende zählt der 3-Dart-Average.', unit: 'Ø', better: 'high',
+    variants: [['10', '10 Aufnahmen'], ['20', '20 Aufnahmen'], ['33', '33 Aufnahmen']], init: () => ({ visits: [] }) },
+  dbl: { name: 'Doppel-Quote', desc: '30 Darts auf Doppel. Bei Rotation geht es nach jedem Treffer zum nächsten Doppel.', unit: '%', better: 'high',
+    variants: [['rot', 'Rotation'], ['20', 'D20'], ['16', 'D16'], ['8', 'D8'], ['25', 'Bull']], init: () => ({ i: 0, darts: 0, hits: 0 }) },
+  treble: { name: 'Treble-Training', desc: '30 Darts auf ein Triple-Feld. Gezählt werden Punkte und Triple-Treffer.', unit: 'Punkte', better: 'high',
+    variants: [['20', 'T20'], ['19', 'T19'], ['18', 'T18']], init: () => ({ darts: 0, pts: 0, T: 0, S: 0, D: 0 }) }
+};
+function trTarget(t) {
+  const st = t.st;
+  if (t.mode === 'atc') return (t.variant === 'D' ? 'D' : t.variant === 'T' ? 'T' : '') + (st.t === 21 ? 'Bull' : st.t);
+  if (t.mode === 'bobs') return st.i < 20 ? 'D' + (st.i + 1) : 'Bull';
+  if (t.mode === 'c121') return st.target;
+  if (t.mode === 'dbl') { const n = t.variant === 'rot' ? DBL_ROT[st.i % DBL_ROT.length] : +t.variant; return n === 25 ? 'Bull' : 'D' + n }
+  if (t.mode === 'treble') return 'T' + t.variant;
+  return '';
+}
+function trInput(t, x) {
+  const st = t.st; t.log.push(clone(st));
+  if (t.mode === 'atc') { st.darts++; if (x === 'hit') { st.hits++; st.t++; if (st.t > 21) return trFinish(t, st.darts, { quote: st.hits / st.darts }) } }
+  if (t.mode === 'bobs') {
+    const tgt = st.i < 20 ? st.i + 1 : 25, val = tgt === 25 ? 50 : tgt * 2, hits = +x;
+    st.score += hits ? hits * val : -val; st.i++;
+    if (st.score < 0) return trFinish(t, st.score, { bis: st.i });
+    if (st.i > 20) return trFinish(t, st.score, { bis: 21 });
+  }
+  if (t.mode === 'c121') { st.n++; if (x === 'hit') { st.succ++; st.target = Math.min(170, st.target + 1); st.best = Math.max(st.best, st.target) } if (st.n >= 10) return trFinish(t, st.succ, { hoechstesZiel: st.best }) }
+  if (t.mode === 'scoring') { st.visits.push(+x); if (st.visits.length >= +t.variant) { const avg = st.visits.reduce((a, b) => a + b, 0) / st.visits.length; return trFinish(t, avg, { aufnahmen: st.visits.length }) } }
+  if (t.mode === 'dbl') { st.darts++; if (x === 'hit') { st.hits++; st.i++ } if (st.darts >= 30) return trFinish(t, st.hits / st.darts * 100, { treffer: st.hits }) }
+  if (t.mode === 'treble') { const n = +t.variant; st.darts++; if (x === 'T') { st.T++; st.pts += 3 * n } else if (x === 'D') { st.D++; st.pts += 2 * n } else if (x === 'S') { st.S++; st.pts += n } if (st.darts >= 30) return trFinish(t, st.pts, { triple: st.T }) }
+  saveTr();
+}
+function trFinish(t, metric, extra) {
+  Store.put('trainings', t.id, { mode: t.mode, variant: t.variant || null, pid: t.pid, date: Date.now(), metric, extra });
+  t.done = { metric, extra }; saveTr();
+}
+const trMetric = (mode, v) => mode === 'scoring' ? fmt(v, 1) : mode === 'dbl' ? fmt(v, 0) + ' %' : String(Math.round(v));
+const trFy = mode => v => mode === 'dbl' ? fmt(v, 0) + '%' : fmt(v, mode === 'scoring' ? 1 : 0);
+
+// ---------- Trainingsplan (komplett ca. 2 h, kurz ca. 25 min)
+// rounds = Runden im kompletten Plan, short = Runden im Kurzplan (0 = nicht im Kurzplan).
+// Kurz-Ergebnisse werden auf die volle Rundenzahl hochgerechnet, damit beide in einer Statistik landen.
+const PLAN = [
+  { id: 'bull', name: 'Bull-Shooter', rule: '3 Darts pro Runde auf Bull. Jedes Bulls-Eye = 1 Punkt.', rounds: 20, short: 10, goal: 10, input: 'count', target: () => 'Bull' },
+  { id: 'co1', name: 'Check-Outs I', rule: '3 Darts pro Zahl, von 41 aufwärts, immer +1. Check-Out = 1 Punkt.', rounds: 40, short: 20, goal: 10, input: 'co', target: n => 41 + n },
+  { id: 'power', name: 'Power-Scoring', rule: 'Aufnahmen auf Punkte. Der Average (aufgerundet) ist die Punktzahl.', rounds: 34, short: 10, goal: 90, input: 'visit' },
+  { id: 'co2', name: 'Check-Outs II', rule: '3 Darts pro Zahl, von 81 aufwärts, immer +1. Check-Out = 1 Punkt.', rounds: 40, short: 0, goal: 10, input: 'co', target: n => 81 + n },
+  { id: 'co25', name: '25 Check-Out', rule: '3 Darts, um Rest 25 zu checken. Check-Out = 1 Punkt.', rounds: 20, short: 10, goal: 10, input: 'co', target: () => 25 },
+  { id: 'switch', name: 'Switch', rule: 'Je ein Dart auf T20, T19, T18. Jedes Triple = 1 Punkt. Ein Ausreißer macht die Runde zu 0.', rounds: 20, short: 10, goal: 10, input: 'switch', target: () => 'T20 · T19 · T18' },
+  { id: 'd40', name: '40', rule: '40 / 20 / 10. Pro getroffenem Doppel 1 Punkt.', rounds: 20, short: 10, goal: 20, input: 'count', target: () => '40' },
+  { id: 'd32', name: '32', rule: '32 / 16 / 8. Pro getroffenem Doppel 1 Punkt.', rounds: 20, short: 0, goal: 20, input: 'count', target: () => '32' },
+  { id: 'd24', name: '24', rule: '24 / 12 / 6. Pro getroffenem Doppel 1 Punkt.', rounds: 20, short: 0, goal: 20, input: 'count', target: () => '24' },
+  { id: 'bo11', name: 'Best of 11 (HNQ Lvl. 7)', rule: 'Sieg = 5 Punkte. Dazu für den Average: ab 70 = 1, ab 75 = 2, ab 80 = 3, ab 85 = 5 Punkte.', rounds: 1, short: 0, goal: 8, input: 'bo11' }
+];
+const planGame = id => PLAN.find(g => g.id === id);
+const planRounds = (g, v) => v === 'kurz' ? g.short : g.rounds;
+const savePlan = () => LS.set('darts.plan', S.plan);
+const bo11Pts = (win, avg) => (win ? 5 : 0) + (avg >= 85 ? 5 : avg >= 80 ? 3 : avg >= 75 ? 2 : avg >= 70 ? 1 : 0);
+const feFmt = v => v == null ? '–' : fmt(v, v % 1 ? 1 : 0);
+function planInput(p, val) {
+  const g = planGame(p.steps[p.i]); p.cur.push(val);
+  if (p.cur.length >= planRounds(g, p.variant)) planFinishGame(p, g); else savePlan();
+}
+function planFinishGame(p, g, pts) {
+  const n = p.cur.length;
+  if (pts == null) pts = g.input === 'visit' ? Math.ceil(p.cur.reduce((a, b) => a + b, 0) / n) : p.cur.reduce((a, b) => a + b, 0);
+  const fe = g.input === 'visit' || g.input === 'bo11' ? pts : pts * g.rounds / n;
+  p.results[g.id] = { pts, played: n, fe: Math.round(fe * 10) / 10 };
+  p.cur = []; p.i++; savePlan();
+  const ids = Object.keys(p.results), punkte = ids.reduce((a, k) => a + p.results[k].fe, 0), ziel = ids.reduce((a, k) => a + planGame(k).goal, 0);
+  Store.put('trainings', p.id, { mode: 'plan', variant: p.variant, pid: p.pid, date: p.date, results: clone(p.results), punkte, ziel, metric: ziel ? punkte / ziel * 100 : 0 });
+  toast(`${g.name}: ${pts} Punkte`);
+}
+const planSessions = pid => Store.list('trainings').filter(t => t.mode === 'plan' && t.pid === pid && t.results).sort((a, b) => a.date - b.date);
+function planTable(pid) {
+  const ss = planSessions(pid).slice(-4);
+  if (!ss.length) return '<p class="muted small" style="margin:0">Noch keine Session gespeichert. Nach jedem Spiel wird automatisch gesichert.</p>';
+  return `<div class="tbl"><table><thead><tr><th>Spiel</th><th class="r">Ziel</th>${ss.map(s => `<th class="r">${dShort(s.date)}${s.variant === 'kurz' ? ' K' : ''}</th>`).join('')}</tr></thead><tbody>
+    ${PLAN.map(g => `<tr><td>${esc(g.name)}</td><td class="n">${g.goal}</td>${ss.map(s => { const r = s.results[g.id]; return `<td class="n ${r && r.fe >= g.goal ? 'good' : ''}">${r ? feFmt(r.fe) : ''}</td>` }).join('')}</tr>`).join('')}
+    <tr><td><b>Ziel erreicht</b></td><td class="n">100 %</td>${ss.map(s => `<td class="n" style="color:var(--paper)">${fmt(s.metric, 0)} %</td>`).join('')}</tr>
+  </tbody></table></div><p class="muted small" style="margin:0">K = Kurzplan, hochgerechnet auf die volle Rundenzahl. Blau = Ziel erreicht.</p>`;
+}
+function planCharts(pid) {
+  const ss = planSessions(pid); if (!ss.length) return '';
+  const per = PLAN.map(g => ({ g, pts: ss.filter(s => s.results[g.id]).map(s => ({ x: dShort(s.date), y: s.results[g.id].fe })) })).filter(x => x.pts.length);
+  return `<div class="card"><div class="bar"><span>Zielerreichung</span><span class="cap">${ss.length} Sessions</span></div>${chart(ss.map(s => ({ x: dShort(s.date), y: s.metric })), { h: 150, label: 'Zielerreichung Trainingsplan', fy: v => fmt(v, 0) + '%', goal: 100 })}</div>
+    ${per.map(({ g, pts }) => `<div class="card"><div class="bar"><span>${esc(g.name)}</span><span class="cap">Ziel ${g.goal} · zuletzt ${feFmt(pts[pts.length - 1].y)} · Best ${feFmt(Math.max(...pts.map(p => p.y)))}</span></div>${chart(pts, { h: 120, label: g.name, fy: v => fmt(v, 0), goal: g.goal })}</div>`).join('')}`;
+}
+setInterval(() => { const el = document.getElementById('warmclock'); if (el && S.plan && S.plan.warmEnd) { const s = Math.max(0, Math.round((S.plan.warmEnd - Date.now()) / 1000)); el.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); if (!s) el.style.color = 'var(--ice)' } }, 1000);
+
+// ---------- Diagramm
+function chart(pts, { h = 170, fy = v => fmt(v, 1), label = 'Verlauf', goal = null } = {}) {
+  if (pts.length < 2) return '<p class="muted small" style="margin:0">Ab zwei Einträgen erscheint hier der Verlauf.</p>';
+  const W = 600, H = h, pl = 44, pr = 16, pt = 16, pb = 26;
+  const ys = pts.map(p => p.y).concat(goal != null ? [goal] : []); let lo = Math.min(...ys), hi = Math.max(...ys);
+  const raw = (hi - lo) / 3 || Math.max(1, Math.abs(hi) * .1);
+  const mag = Math.pow(10, Math.floor(Math.log10(raw))); const step = [1, 2, 2.5, 5, 10].map(x => x * mag).find(x => x >= raw);
+  lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step; if (hi === lo) hi = lo + step;
+  const X = i => pl + i * (W - pl - pr) / (pts.length - 1), Y = v => pt + (hi - v) / (hi - lo) * (H - pt - pb);
+  let g = '';
+  for (let v = lo; v <= hi + 1e-9; v += step) g += `<line class="grid" x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}"/><text class="ax" x="${pl - 6}" y="${Y(v) + 4}" text-anchor="end">${esc(fy(v))}</text>`;
+  if (goal != null) g += `<line class="goal" x1="${pl}" x2="${W - pr}" y1="${Y(goal)}" y2="${Y(goal)}"/><text class="ax" x="${pl + 4}" y="${Y(goal) - 5}">Ziel</text>`;
+  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(p.y).toFixed(1)}`).join('');
+  const area = `${line}L${X(pts.length - 1)},${Y(lo)}L${X(0)},${Y(lo)}Z`;
+  const last = pts[pts.length - 1], lx = X(pts.length - 1), ly = Y(last.y);
+  const dots = pts.length <= 24 ? pts.slice(0, -1).map((p, i) => `<circle class="pt" cx="${X(i)}" cy="${Y(p.y)}" r="2.5"/>`).join('') : '';
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">${g}<path class="ar" d="${area}"/><path class="ln" d="${line}"/>${dots}
+    <circle class="end" cx="${lx}" cy="${ly}" r="4.5"/><text class="lbl" x="${lx - 8}" y="${ly - 10}" text-anchor="end">${esc(fy(last.y))}</text>
+    <text class="ax" x="${pl}" y="${H - 6}">${esc(pts[0].x)}</text><text class="ax" x="${W - pr}" y="${H - 6}" text-anchor="end">${esc(last.x)}</text></svg>`;
+}
+
+// ---------- Ansichten: Liga
+function vLiga() {
+  if (!L) return LIGA_ERR
+    ? `<section><h2>Liga</h2><div class="note warn">Die Liga-Daten sind gerade nicht erreichbar. Prüfe die Internetverbindung und tippe oben auf Aktualisieren.</div></section>`
+    : `<section><h2>Liga</h2><p class="muted">Lade Liga-Daten …</p></section>`;
+  if (S.report) return vReport();
+  if (S.lplayer) return vLPlayer();
+  const tabs = [['team', 'Mein Team'], ['tabelle', 'Tabelle'], ['runden', 'Spieltage'], ['spieler', 'Spieler'], ['teams', 'Teams']];
+  const body = { team: () => vTeam(S.viewTeam || S.team), tabelle: vTabelle, runden: vRunden, spieler: vSpielerRang, teams: vTeams }[S.liga]();
+  return `<section><div class="seg" role="tablist">${tabs.map(([k, l]) => `<button class="${S.liga === k ? 'on' : ''}" data-act="liga" data-v="${k}">${l}</button>`).join('')}</div></section>${body}
+    <p class="muted small" style="margin:0">Quelle: wdv-dart.at, ${L.division}. Division, Saison ${esc(L.saison)}. Ø = 3-Dart-Average aus den Einzeln der Spielberichte.</p>`;
+}
+function vTeam(team) {
+  const row = teamRow(team) || {}, info = teamInfo(team), today = new Date(); today.setHours(0, 0, 0, 0);
+  const games = L.spiele.filter(s => s.heim === team || s.gast === team);
+  const next = games.filter(s => s.setsH == null && pDate(s.datum) >= today).sort((a, b) => pDate(a.datum) - pDate(b.datum))[0];
+  const done = games.filter(s => s.setsH != null).sort((a, b) => b.runde - a.runde);
+  const players = teamPlayers(team);
+  const rounds = [...new Set(done.map(s => s.runde))].sort((a, b) => a - b);
+  let nx = '';
+  if (next) {
+    const home = next.heim === team, opp = home ? next.gast : next.heim, venue = teamInfo(next.heim), oRow = teamRow(opp) || {};
+    nx = `<section><div class="next"><span class="cap">Nächstes Spiel · Runde ${next.runde} · ${esc(next.datum)}</span>
+      <div class="vs">${home ? 'vs.' : '@'} ${esc(opp)}</div>
+      <div class="muted">${esc(venue.spielort || '')} · ${esc(venue.adresse || '')}, ${esc(venue.ort || '')}</div>
+      <div class="row" style="justify-content:space-between"><span class="cap">Gegner: Platz ${oRow.platz || '–'} · ${oRow.g || 0}-${oRow.u || 0}-${oRow.v || 0}</span><button class="link" data-act="team" data-v="${esc(opp)}">Gegner ansehen</button></div></div></section>`;
+  }
+  return `<section>${team !== S.team ? `<button class="link" data-act="team" data-v="">← Mein Team</button>` : ''}
+    <div class="bar"><h2>${esc(team)}</h2>${team !== S.team ? `<button class="chip" data-act="setTeam" data-v="${esc(team)}">Als mein Team</button>` : ''}</div>
+    <p class="muted small" style="margin:0">${esc(info.verein || '')} · Heimspielort ${esc(info.spielort || '')}</p>
+    <div class="kpis"><div class="kpi"><b>${row.platz || '–'}.</b><span>Platz</span></div><div class="kpi"><b>${row.g || 0}-${row.u || 0}-${row.v || 0}</b><span>S-U-N</span></div>
+      <div class="kpi"><b>${fmt(row.setsG, 0)}:${row.setsV ?? '–'}</b><span>Sets</span></div></div></section>
+    ${nx}
+    <section><h3>Ergebnisse</h3><div class="list">${done.map(s => `<button class="li" data-act="reportBy" data-v="${esc(s.heim + '|' + s.gast)}"><span class="cap" style="width:28px">R${s.runde}</span><span class="grow">${s.heim === team ? 'vs. ' + esc(s.gast) : '@ ' + esc(s.heim)}</span>${resPill(s, team)}<span class="score">${s.heim === team ? s.setsH + ':' + s.setsG : s.setsG + ':' + s.setsH}</span></button>`).join('') || '<div class="li muted">Noch keine Ergebnisse.</div>'}</div></section>
+    <section><h3>Spieler</h3><div class="tbl"><table><thead><tr><th>Spieler</th><th class="r">Ø</th><th class="c">Einzel</th><th class="c">Legs</th><th class="c">Doppel</th><th class="r">Best</th><th class="r">180</th><th class="r">HiFi</th></tr></thead><tbody>
+      ${players.map(p => `<tr class="tap" data-act="lplayer" data-v="${esc(p.name)}"><td>${esc(p.name)}</td><td class="n" style="color:var(--paper)">${fmt(p.avg, 1)}</td><td class="c mono">${p.singW}-${p.sing - p.singW}</td><td class="c mono">${p.legsW}-${p.legs - p.legsW}</td><td class="c mono">${p.dblW}-${p.dbl - p.dblW}</td><td class="n">${p.best ?? '–'}</td><td class="n">${p.s180 || '–'}</td><td class="n">${p.hifi ?? '–'}</td></tr>`).join('')}
+    </tbody></table></div><p class="muted small" style="margin:0">Best = wenigste Darts in einem gewonnenen Leg. Tippe auf einen Spieler für seinen Verlauf.</p></section>
+    ${rounds.length ? `<section><h3>Ø pro Spieltag</h3><div class="tbl heat"><table><thead><tr><th>Spieler</th>${rounds.map(r => `<th class="c">R${r}</th>`).join('')}</tr></thead><tbody>
+      ${players.map(p => `<tr><td>${esc(p.name)}</td>${rounds.map(r => { const R = p.rounds[r]; return `<td class="v ${heatCls(R && R.avg)}">${R ? fmt(R.avg, 1) : ''}</td>` }).join('')}</tr>`).join('')}
+    </tbody></table></div><p class="muted small" style="margin:0">Blau ab Ø 48, hellblau ab 40, rot darunter. Leer = kein Einzel gespielt.</p></section>` : ''}`;
+}
+function vTabelle() {
+  return `<section><h2>Tabelle</h2><div class="tbl"><table><thead><tr><th class="c">#</th><th>Mannschaft</th><th class="c">Sp</th><th class="c">S-U-N</th><th class="c">Legs</th><th class="r">Sets</th></tr></thead><tbody>
+    ${L.tabelle.map(r => `<tr class="tap ${r.team === S.team ? 'me' : ''}" data-act="team" data-v="${esc(r.team)}"><td class="c mono">${r.platz}</td><td>${esc(r.team)}</td><td class="c mono">${r.spiele}</td><td class="c mono">${r.g}-${r.u}-${r.v}</td><td class="c mono">${r.legsG}:${r.legsV}</td><td class="n" style="color:var(--paper)">${fmt(r.setsG, 0)}:${r.setsV}</td></tr>`).join('')}
+  </tbody></table></div></section>`;
+}
+function vRunden() {
+  const pr = playedRounds(); if (S.round == null) S.round = pr[pr.length - 1] || 1;
+  const all = [...new Set(L.spiele.map(s => s.runde))].sort((a, b) => a - b);
+  const games = L.spiele.filter(s => s.runde === S.round);
+  return `<section><h2>Spieltage</h2><div class="seg">${all.map(r => `<button class="${r === S.round ? 'on' : ''}" data-act="round" data-v="${r}" ${pr.includes(r) ? 'style="color:var(--paper)"' : ''}>${r}</button>`).join('')}</div>
+    <h3>Runde ${S.round} · ${esc(games[0] ? games[0].datum : '')}</h3>
+    <div class="list">${games.map(s => { const mine = s.heim === S.team || s.gast === S.team; return `<button class="li ${mine ? 'sel' : ''}" ${s.bericht ? `data-act="reportBy" data-v="${esc(s.heim + '|' + s.gast)}"` : ''}><span class="grow two">${esc(s.heim)}<br><span class="muted">${esc(s.gast)}</span></span><span class="score">${s.setsH != null ? s.setsH + ':' + s.setsG : '–:–'}</span></button>` }).join('')}</div></section>`;
+}
+function vSpielerRang() {
+  const ps = L.players.filter(p => p.legs > 0 && (S.lfilter === 'alle' || p.team === S.team));
+  const key = { avg: p => p.avg || 0, s180: p => p.s180, hifi: p => p.hifi || 0, best: p => -(p.best || 99) }[S.lsort];
+  ps.sort((a, b) => key(b) - key(a));
+  return `<section><h2>Spieler</h2><div class="seg">${[['avg', 'Ø'], ['s180', '180er'], ['hifi', 'High Finish'], ['best', 'Bestes Leg']].map(([k, l]) => `<button class="${S.lsort === k ? 'on' : ''}" data-act="lsort" data-v="${k}">${l}</button>`).join('')}</div>
+    <div class="seg">${[['alle', 'Alle Teams'], ['team', 'Mein Team']].map(([k, l]) => `<button class="${S.lfilter === k ? 'on' : ''}" data-act="lfilter" data-v="${k}">${l}</button>`).join('')}</div>
+    <div class="tbl"><table><thead><tr><th class="c">#</th><th>Spieler</th><th class="r">Ø</th><th class="c">Legs</th><th class="r">Best</th><th class="r">180</th><th class="r">HiFi</th><th>Team</th></tr></thead><tbody>
+    ${ps.map((p, i) => `<tr class="tap ${p.team === S.team ? 'me' : ''}" data-act="lplayer" data-v="${esc(p.name)}"><td class="c mono">${i + 1}</td><td>${esc(p.name)}</td><td class="n" style="color:var(--paper)">${fmt(p.avg, 1)}</td><td class="c mono">${p.legsW}-${p.legs - p.legsW}</td><td class="n">${p.best ?? '–'}</td><td class="n">${p.s180 || '–'}</td><td class="n">${p.hifi ?? '–'}</td><td class="muted">${esc(p.team)}</td></tr>`).join('')}
+    </tbody></table></div></section>`;
+}
+function vTeams() {
+  return `<section><h2>Mannschaften</h2><div class="list">${L.teams.map(t => `<button class="li ${t.name === S.team ? 'sel' : ''}" data-act="team" data-v="${esc(t.name)}"><span class="grow two"><span>${esc(t.name)}</span><br><span class="muted small">${esc(t.spielort)} · ${esc(t.adresse)}, ${esc(t.ort)}${t.telefon ? ' · ' + esc(t.telefon) : ''}</span></span><span class="cap">${(teamRow(t.name) || {}).platz || ''}.</span></button>`).join('')}</div></section>`;
+}
+function vLPlayer() {
+  const p = L.byName[S.lplayer]; if (!p) { S.lplayer = null; return vLiga() }
+  const rs = Object.keys(p.rounds).map(Number).sort((a, b) => a - b);
+  const pts = rs.filter(r => p.rounds[r].avg != null).map(r => ({ x: 'R' + r, y: p.rounds[r].avg }));
+  const w = L.wdv[p.name] || {};
+  return `<section><button class="link" data-act="lback">← Zurück</button><h2>${esc(p.name)}</h2><p class="muted small" style="margin:0">${esc(p.team)}${p.pass ? ' · Pass ' + esc(p.pass) : ''}</p>
+    <div class="kpis"><div class="kpi"><b>${fmt(p.avg, 1)}</b><span>Ø Saison</span></div><div class="kpi"><b>${p.singW}-${p.sing - p.singW}</b><span>Einzel</span></div><div class="kpi"><b>${p.legsW}-${p.legs - p.legsW}</b><span>Legs</span></div>
+      <div class="kpi"><b>${p.best ?? '–'}</b><span>Bestes Leg</span></div><div class="kpi"><b>${p.s180 || 0}</b><span>180er</span></div><div class="kpi"><b>${p.hifi ?? '–'}</b><span>High Finish</span></div></div></section>
+    <section><h3>Ø pro Spieltag</h3><div class="card">${chart(pts, { label: 'Average pro Spieltag' })}</div></section>
+    <section><h3>Einzel</h3><div class="list">${rs.map(r => p.rounds[r].gegner.map(g => `<div class="li"><span class="cap" style="width:28px">R${r}</span><span class="grow">vs. ${esc(g.name || '?')}</span><span class="pill ${g.won ? 'w' : 'l'}">${g.won ? 'S' : 'N'}</span><span class="score">${g.score}</span></div>`).join('')).join('') || '<div class="li muted">Keine Einzel.</div>'}</div>
+    ${w.ldg ? `<p class="muted small" style="margin:0">Low Darts Games laut WDV: ${esc(w.ldg)}</p>` : ''}</section>`;
+}
+function vReport() {
+  const b = L.berichte.find(x => x.id === S.report); if (!b) { S.report = null; return vLiga() }
+  const legAvg = legs => { let d = 0, p = 0; legs.forEach(([x, r]) => { d += x; p += 501 - r }); return d ? p / d * 3 : null };
+  const side = (s, k) => { const me = s[k]; return `<div class="${k === 'heim' ? 'h' : 'g'}"><span>${me.spieler.map(esc).join(' / ') || '–'}</span>${s.typ === 'einzel' ? `<div class="cap">Ø ${fmt(legAvg(me.legs), 1)}</div><div class="legs">${me.legs.map(([d, r]) => `<i class="${r === 0 ? 'w' : ''}" title="${d} Darts, Rest ${r}">${r === 0 ? d : 'R' + r}</i>`).join('')}</div>` : '<div class="cap">Doppel</div>'}</div>` };
+  const sp = b.spiel || {};
+  return `<section><button class="link" data-act="rback">← Zurück</button><span class="cap">Runde ${b.runde} · ${esc(b.datum)}</span>
+    <div class="bar"><h2 class="grow">${esc(b.heim)} <span class="muted">vs.</span> ${esc(b.gast)}</h2><span class="score" style="font-size:28px">${sp.setsH ?? '–'}:${sp.setsG ?? '–'}</span></div>
+    <p class="muted small" style="margin:0">Legs ${sp.legsH ?? '–'}:${sp.legsG ?? '–'}${b.s180 && b.s180 !== 'n/a' ? ' · 180er: ' + esc(b.s180) : ''}${b.hifi && b.hifi !== 'n/a' ? ' · High Finish: ' + esc(b.hifi) : ''}</p>
+    <div class="list">${b.sets.map(s => `<div class="set">${side(s, 'heim')}<span class="score">${s.heim.gewonnen}:${s.gast.gewonnen}</span>${side(s, 'gast')}</div>`).join('')}</div>
+    <p class="muted small" style="margin:0">Blau: gewonnenes Leg mit Anzahl Darts. R = Restpunkte im verlorenen Leg.</p></section>`;
+}
+
+// ---------- Ansichten: Spielen
+function vSpielen() {
+  if (S.live && S.live.done) return vMatchEnd(S.live);
+  if (S.live) return vMatch(S.live);
+  const st = S.setup, ps = profiles();
+  const modes = [['x01', 501, '501'], ['x01', 301, '301'], ['x01', 701, '701'], ['cricket', 0, 'Cricket']];
+  return `<section><h2>Neues Spiel</h2><h3>Spieler</h3>
+    <div class="chips">${ps.map(p => { const i = st.players.indexOf(p.id); return `<button class="chip ${i >= 0 ? 'on' : ''}" data-act="togglePlayer" data-v="${p.id}">${i >= 0 ? (i + 1) + '. ' : ''}${esc(p.name)}</button>` }).join('') || '<span class="muted small">Noch keine Spieler. Lege unten den ersten an.</span>'}</div>
+    <div class="row"><input type="text" id="newp" class="grow" placeholder="Neuer Spieler, z. B. Leon" maxlength="30" autocomplete="off"><button class="btn" data-act="addProfile">Anlegen</button></div>
+    ${st.players.length > 1 ? `<button class="link" data-act="shuffle">Reihenfolge mischen</button>` : ''}</section>
+    <section><h3>Modus</h3><div class="seg">${modes.map(([t, s, l]) => `<button class="${st.type === t && (t === 'cricket' || st.start === s) ? 'on' : ''}" data-act="mode" data-t="${t}" data-s="${s}">${l}</button>`).join('')}</div>
+    <h3>Legs (First to)</h3><div class="seg">${[1, 2, 3, 4, 5].map(n => `<button class="${st.legs === n ? 'on' : ''}" data-act="legs" data-v="${n}">${n}</button>`).join('')}</div>
+    ${st.type === 'x01' ? `<h3>Finish</h3><div class="seg">${[['double', 'Double Out'], ['single', 'Single Out'], ['master', 'Master Out']].map(([k, l]) => `<button class="${st.out === k ? 'on' : ''}" data-act="out" data-v="${k}">${l}</button>`).join('')}</div>
+    <h3>Eingabe</h3><div class="seg">${[['dart', 'Pro Dart'], ['visit', 'Pro Aufnahme']].map(([k, l]) => `<button class="${st.input === k ? 'on' : ''}" data-act="input" data-v="${k}">${l}</button>`).join('')}</div>
+    <p class="muted small" style="margin:0">Gilt für alle Spieler und lässt sich im Spiel jederzeit umschalten. Pro Dart liefert zusätzlich die Doppelquote.</p>` : '<p class="muted small" style="margin:0">Cricket wird pro Dart eingegeben.</p>'}</section>
+    <section><button class="btn primary block big" data-act="startMatch" ${st.players.length ? '' : 'disabled'}>Spiel starten</button></section>`;
+}
+function vMatch(m) {
+  const leg = curLeg(m), cur = turnOf(m, leg), won = legsWon(m), stats = matchStats(m), isX = m.type === 'x01';
+  const cst = isX ? null : crState(m, leg, true);
+  const head = `<div class="bar"><span class="cap">${isX ? m.start + ' · ' + { double: 'Double Out', single: 'Single Out', master: 'Master Out' }[m.out] : 'Cricket'} · First to ${m.legsToWin} · Leg ${m.legs.length}</span>
+    <span class="row">${isX ? `<button class="chip" data-act="toggleInput">${m.input === 'dart' ? 'Pro Dart' : 'Pro Aufnahme'} ⇄</button>` : ''}<button class="chip" data-act="abort">Beenden</button></span></div>
+    ${S.abortAsk ? `<div class="note warn row"><span class="grow">Spiel ohne Speichern beenden?</span><button class="btn danger" data-act="abortYes">Beenden</button><button class="btn" data-act="abortNo">Weiter</button></div>` : ''}`;
+  const cards = m.players.map((pid, pi) => {
+    const act = pi === cur;
+    if (isX) {
+      const rem = remOf(m, leg, pi) - (act ? m.pending.reduce((a, d) => a + dartVal(d), 0) : 0);
+      const co = act && m.out === 'double' ? checkout(rem, 3 - (m.input === 'dart' ? m.pending.length : 0)) : null;
+      return `<div class="pl ${act ? 'act' : ''}"><span class="nm">${esc(pname(pid))}</span><span class="rem">${rem}</span>
+        <span class="sub"><span>Legs ${won[pi]}</span><span>Ø ${fmt(stats[pi].avg, 1)}</span><span>${stats[pi].darts} D</span></span><span class="co">${co ? co.map(dLabel).join(' · ') : ''}</span></div>`;
+    }
+    const mk = cst.marks[pi];
+    return `<div class="pl ${act ? 'act' : ''}"><span class="nm">${esc(pname(pid))}</span><span class="rem" style="font-size:40px">${cst.pts[pi]}</span>
+      <span class="sub"><span>Legs ${won[pi]}</span><span>MPR ${fmt(stats[pi].mpr, 2)}</span></span>
+      <span class="sub" style="color:var(--paper)">${[20, 19, 18, 17, 16, 15, 25].map(n => `<span>${n === 25 ? 'B' : n}:${mk[n] >= 3 ? '✓' : '/'.repeat(mk[n]) || '·'}</span>`).join('')}</span></div>`;
+  }).join('');
+  const last = [...leg.visits].reverse()[0];
+  const lastTxt = last ? `${esc(pname(m.players[last.p]))}: ${last.bust ? 'überworfen' : isX ? last.score : last.darts.map(dLabel).join(' ')}` : 'Leg ' + m.legs.length + ' · ' + esc(pname(m.players[leg.starter])) + ' beginnt';
+  let pad;
+  if (m.input === 'dart' || !isX) {
+    const nums = isX ? Array.from({ length: 20 }, (_, i) => i + 1) : [15, 16, 17, 18, 19, 20];
+    pad = `<div class="darts">${[0, 1, 2].map(i => m.pending[i] ? `<span class="f">${dLabel(m.pending[i])}</span>` : '<span></span>').join('')}</div>
+      <div class="pad"><div class="mods">${['S', 'D', 'T'].map(k => `<button class="${k.toLowerCase()} ${S.mod === k ? 'on' : ''}" data-act="mod" data-v="${k}">${{ S: 'Single', D: 'Double', T: 'Triple' }[k]}</button>`).join('')}</div>
+      ${nums.map(n => `<button data-act="dart" data-v="${n}">${n}</button>`).join('')}
+      <button data-act="dart" data-v="25" ${S.mod === 'T' ? 'disabled' : ''}>${S.mod === 'D' ? 'Bull' : '25'}</button>
+      <button data-act="dart" data-v="0" class="act">0</button>${isX ? '' : '<span></span><span></span>'}
+      <button data-act="undo" class="act wide">↶ Zurück</button></div>`;
+  } else if (S.ask) {
+    pad = `<div class="note">Checkout ${S.ask.score}. Mit wie vielen Darts?</div><div class="tbtns">${[1, 2, 3].filter(n => n >= S.ask.min).map(n => `<button class="hit" data-act="coDarts" data-v="${n}">${n} Dart${n > 1 ? 's' : ''}</button>`).join('')}<button class="miss" data-act="coCancel">Abbrechen</button></div>`;
+  } else {
+    pad = `<div class="entry">${S.entry || '<span class="muted">0</span>'}</div>
+      <div class="quick">${[26, 41, 45, 60, 81, 85, 95, 100, 140, 180].map(v => `<button data-act="quick" data-v="${v}">${v}</button>`).join('')}</div>
+      <div class="pad np">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button data-act="key" data-v="${n}">${n}</button>`).join('')}<button class="act" data-act="key" data-v="del">⌫</button><button data-act="key" data-v="0">0</button><button class="ok" data-act="visitOk">OK</button></div>
+      <button class="btn block" data-act="undo">↶ Letzte Aufnahme zurück</button>`;
+  }
+  return `<section>${head}<div class="board">${cards}</div><p class="cap" style="margin:0">${lastTxt}</p>${pad}</section>`;
+}
+function vMatchEnd(m) {
+  const st = m.stats || matchStats(m), isX = m.type === 'x01', w = legsWon(m);
+  return `<section><h3>Spiel beendet</h3><h2>${esc(pname(m.players[m.winner]))} gewinnt ${w[m.winner]}:${Math.max(0, ...w.filter((_, i) => i !== m.winner))}</h2>
+    <div class="tbl"><table><thead><tr><th>Spieler</th><th class="c">Legs</th>${isX ? '<th class="r">Ø</th><th class="r">First 9</th><th class="r">Checkout</th><th class="r">180</th><th class="r">100+</th><th class="r">High Finish</th><th class="r">Bestes Leg</th>' : '<th class="r">MPR</th><th class="r">Darts</th>'}</tr></thead><tbody>
+    ${st.map((s, i) => `<tr class="${i === m.winner ? 'me' : ''}"><td>${esc(pname(s.pid))}</td><td class="c mono">${s.legsW}</td>${isX ? `<td class="n" style="color:var(--paper)">${fmt(s.avg, 1)}</td><td class="n">${fmt(s.f9, 1)}</td><td class="n">${s.att ? pct(s.hit, s.att) : '–'}</td><td class="n">${s.s180}</td><td class="n">${s.s100 + s.s140}</td><td class="n">${s.hi || '–'}</td><td class="n">${s.best ?? '–'}</td>` : `<td class="n">${fmt(s.mpr, 2)}</td><td class="n">${s.darts}</td>`}</tr>`).join('')}
+    </tbody></table></div><p class="muted small" style="margin:0">Gespeichert. Die Werte fließen in die Statistik der Spieler ein.</p>
+    <div class="row"><button class="btn primary grow" data-act="rematch">Revanche</button><button class="btn grow" data-act="newGame">Neues Spiel</button></div>
+    <button class="link" data-act="fixLast">Letzten Wurf korrigieren</button></section>`;
+}
+
+// ---------- Ansichten: Training
+function vPlan() {
+  const p = S.plan, kurz = p.variant === 'kurz';
+  const head = `<div class="bar"><span class="cap">Trainingsplan ${kurz ? 'kurz' : 'komplett'} · ${esc(pname(p.pid))} · ${Math.min(p.i + 1, p.steps.length)}/${p.steps.length}</span><button class="chip" data-act="planAbort">Beenden</button></div>
+    ${S.planAbortAsk ? `<div class="note warn row"><span class="grow">Training beenden? Fertige Spiele bleiben gespeichert.</span><button class="btn danger" data-act="planAbortYes">Beenden</button><button class="btn" data-act="planAbortNo">Weiter</button></div>` : ''}`;
+  if (p.i >= p.steps.length) {
+    const ids = Object.keys(p.results), punkte = ids.reduce((a, k) => a + p.results[k].fe, 0), ziel = ids.reduce((a, k) => a + planGame(k).goal, 0);
+    return `<section><span class="cap">Trainingsplan ${kurz ? 'kurz' : 'komplett'} · ${esc(pname(p.pid))}</span><h2>${fmt(ziel ? punkte / ziel * 100 : 0, 0)} % vom Ziel</h2>
+      <div class="tbl"><table><thead><tr><th>Spiel</th><th class="r">Punkte</th><th class="r">Hochgerechnet</th><th class="r">Ziel</th></tr></thead><tbody>
+      ${ids.map(k => { const g = planGame(k), r = p.results[k]; return `<tr><td>${esc(g.name)}</td><td class="n">${r.pts}${g.input === 'visit' || g.input === 'bo11' ? '' : ' / ' + r.played}</td><td class="n ${r.fe >= g.goal ? 'good' : ''}">${feFmt(r.fe)}</td><td class="n">${g.goal}</td></tr>` }).join('')}
+      <tr><td><b>Summe</b></td><td></td><td class="n" style="color:var(--paper)">${feFmt(Math.round(punkte * 10) / 10)}</td><td class="n">${ziel}</td></tr></tbody></table></div>
+      <p class="muted small" style="margin:0">Gespeichert. Die Entwicklung siehst du unter Statistik.</p>
+      <button class="btn primary block" data-act="planClose">Fertig</button></section>`;
+  }
+  const step = p.steps[p.i];
+  if (step === 'warm') {
+    const min = kurz ? 3 : 10;
+    return `<section>${head}<h2>Warm-Up</h2><p class="muted" style="margin:0">${min} Minuten warmspielen. Arm locker bekommen.</p>
+      <div class="tbig" id="warmclock">${p.warmEnd ? '' : min + ':00'}</div>
+      <div class="row">${p.warmEnd ? '' : `<button class="btn grow" data-act="planWarm" data-v="${min}">Timer starten</button>`}<button class="btn primary grow" data-act="planNext">Weiter zum ersten Spiel</button></div></section>`;
+  }
+  const g = planGame(step), N = planRounds(g, p.variant), n = p.cur.length;
+  const sum = p.cur.reduce((a, b) => a + b, 0);
+  const goalNow = g.input === 'visit' || g.input === 'bo11' ? g.goal : Math.round(g.goal * N / g.rounds * 10) / 10;
+  let big = '', btns = '';
+  if (g.input === 'bo11') {
+    const bo = p.bo || {};
+    return `<section>${head}<h2>${esc(g.name)}</h2><p class="muted" style="margin:0">${esc(g.rule)}</p>
+      <p class="muted small" style="margin:0">Spiel das Best of 11 (z. B. gegen den Computer) und trag danach das Ergebnis ein.</p>
+      <div class="seg"><button class="${bo.win === true ? 'on' : ''}" data-act="planBo" data-v="1">Gewonnen</button><button class="${bo.win === false ? 'on' : ''}" data-act="planBo" data-v="0">Verloren</button></div>
+      <label class="f">Dein Average<input type="text" id="boavg" inputmode="decimal" placeholder="z. B. 72,4" value="${bo.avg ?? ''}"></label>
+      <button class="btn primary block big" data-act="planBoSave">Speichern</button><button class="link" data-act="planSkip">Spiel überspringen</button></section>`;
+  }
+  if (g.input === 'visit') {
+    big = fmt(n ? sum / n : null, 1);
+    return `<section>${head}<h2>${esc(g.name)}</h2><p class="muted" style="margin:0">${esc(g.rule)}</p>
+      <div class="tbig">${big}</div><p class="cap" style="text-align:center;margin:0">Ø nach ${n} von ${N} Aufnahmen · Ziel ${g.goal}${n ? ' · zuletzt ' + p.cur[n - 1] : ''}</p>
+      <div class="entry">${S.entry || '<span class="muted">0</span>'}</div>
+      <div class="quick">${[26, 41, 45, 60, 81, 85, 95, 100, 140, 180].map(v => `<button data-act="planQuick" data-v="${v}">${v}</button>`).join('')}</div>
+      <div class="pad np">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(k => `<button data-act="key" data-v="${k}">${k}</button>`).join('')}<button class="act" data-act="key" data-v="del">⌫</button><button data-act="key" data-v="0">0</button><button class="ok" data-act="planOk">OK</button></div>
+      <div class="row"><button class="btn grow" data-act="planUndo" ${n ? '' : 'disabled'}>↶ Zurück</button><button class="btn grow" data-act="planSkip">Überspringen</button></div></section>`;
+  }
+  big = g.target(n);
+  if (g.input === 'count') btns = [0, 1, 2, 3].map(v => `<button class="${v ? 'hit' : 'miss'}" data-act="planIn" data-v="${v}">${v}</button>`).join('');
+  if (g.input === 'co') btns = `<button class="hit" data-act="planIn" data-v="1">Gecheckt</button><button class="miss" data-act="planIn" data-v="0">Nicht gecheckt</button>`;
+  if (g.input === 'switch') btns = [1, 2, 3].map(v => `<button class="hit" data-act="planIn" data-v="${v}">${v} Triple</button>`).join('') + `<button class="miss" data-act="planIn" data-v="0">0 / Ausreißer</button>`;
+  return `<section>${head}<h2>${esc(g.name)}</h2><p class="muted" style="margin:0">${esc(g.rule)}</p>
+    <p class="cap" style="margin:0;text-align:center">Runde ${n + 1} von ${N}</p><div class="tbig" style="font-size:${String(big).length > 6 ? 36 : 64}px">${esc(big)}</div>
+    <p class="muted" style="text-align:center;margin:0"><span class="mono" style="color:var(--paper)">${sum}</span> Punkte · Ziel ${goalNow}</p>
+    <div class="tbtns">${btns}</div>
+    <div class="row"><button class="btn grow" data-act="planUndo" ${n ? '' : 'disabled'}>↶ Zurück</button><button class="btn grow" data-act="planSkip">Überspringen</button></div></section>`;
+}
+function vTraining() {
+  if (S.plan) return vPlan();
+  const t = S.tr;
+  if (t) {
+    const def = TR[t.mode];
+    if (t.done) {
+      const hist = Store.list('trainings').filter(x => x.mode === t.mode && x.pid === t.pid && (x.variant || null) === (t.variant || null)).sort((a, b) => a.date - b.date);
+      const vals = hist.map(x => x.metric), best = def.better === 'low' ? Math.min(...vals) : Math.max(...vals);
+      return `<section><span class="cap">${esc(def.name)} · ${esc(pname(t.pid))}</span><h2>Ergebnis: ${trMetric(t.mode, t.done.metric)}${def.unit === '%' || def.unit === 'Ø' ? '' : ' ' + esc(def.unit)}</h2>
+        ${t.done.metric === best && hist.length > 1 ? '<div class="note">Neuer Bestwert.</div>' : ''}
+        <div class="card">${chart(hist.map(x => ({ x: dShort(x.date), y: x.metric })), { label: def.name + ' Verlauf', fy: trFy(t.mode) })}</div>
+        <div class="row"><button class="btn primary grow" data-act="trAgain">Nochmal</button><button class="btn grow" data-act="trClose">Fertig</button></div></section>`;
+    }
+    const st = t.st; let info = '', btns = '';
+    if (t.mode === 'atc') { info = `${st.darts} Darts · ${st.hits} Treffer`; btns = `<button class="hit" data-act="trIn" data-v="hit">Treffer</button><button class="miss" data-act="trIn" data-v="miss">Daneben</button>` }
+    if (t.mode === 'bobs') { info = `Punkte <span class="mono" style="color:var(--paper)">${st.score}</span> · Doppel ${st.i + 1} von 21`; btns = [0, 1, 2, 3].map(n => `<button class="${n ? 'hit' : 'miss'}" data-act="trIn" data-v="${n}">${n} Treffer</button>`).join('') }
+    if (t.mode === 'c121') { info = `Versuch ${st.n + 1} von 10 · ${st.succ} geschafft · 9 Darts`; btns = `<button class="hit" data-act="trIn" data-v="hit">Gecheckt</button><button class="miss" data-act="trIn" data-v="miss">Nicht gecheckt</button>` }
+    if (t.mode === 'dbl') { info = `Dart ${st.darts + 1} von 30 · ${st.hits} Treffer (${pct(st.hits, st.darts)})`; btns = `<button class="hit" data-act="trIn" data-v="hit">Treffer</button><button class="miss" data-act="trIn" data-v="miss">Daneben</button>` }
+    if (t.mode === 'treble') { info = `Dart ${st.darts + 1} von 30 · ${st.pts} Punkte · ${st.T} Triple`; btns = `<button class="hit" data-act="trIn" data-v="T">Triple</button><button data-act="trIn" data-v="D">Double</button><button data-act="trIn" data-v="S">Single</button><button class="miss" data-act="trIn" data-v="M">Daneben</button>` }
+    if (t.mode === 'scoring') {
+      const n = st.visits.length, avg = n ? st.visits.reduce((a, b) => a + b, 0) / n : null;
+      return `<section><div class="bar"><span class="cap">${esc(def.name)} · ${esc(pname(t.pid))}</span><button class="chip" data-act="trAbort">Abbrechen</button></div>
+        <div class="tbig">${fmt(avg, 1)}</div><p class="cap" style="text-align:center;margin:0">Ø nach ${n} von ${t.variant} Aufnahmen${n ? ' · zuletzt ' + st.visits[n - 1] : ''}</p>
+        <div class="entry">${S.entry || '<span class="muted">0</span>'}</div>
+        <div class="quick">${[26, 41, 45, 60, 81, 85, 95, 100, 140, 180].map(v => `<button data-act="trQuick" data-v="${v}">${v}</button>`).join('')}</div>
+        <div class="pad np">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(k => `<button data-act="key" data-v="${k}">${k}</button>`).join('')}<button class="act" data-act="key" data-v="del">⌫</button><button data-act="key" data-v="0">0</button><button class="ok" data-act="trOk">OK</button></div>
+        <button class="btn block" data-act="trUndo">↶ Zurück</button></section>`;
+    }
+    return `<section><div class="bar"><span class="cap">${esc(def.name)} · ${esc(pname(t.pid))}</span><button class="chip" data-act="trAbort">Abbrechen</button></div>
+      <p class="cap" style="margin:0;text-align:center">Ziel</p><div class="tbig">${esc(trTarget(t))}</div><p class="muted" style="text-align:center;margin:0">${info}</p>
+      <div class="tbtns">${btns}</div><button class="btn block" data-act="trUndo" ${t.log.length ? '' : 'disabled'}>↶ Zurück</button></section>`;
+  }
+  const def = TR[S.trSel], ps = profiles();
+  if (def.variants && !def.variants.some(v => v[0] === S.trVar)) S.trVar = def.variants[0][0];
+  if (!S.trPid || !Store.data.profiles[S.trPid]) S.trPid = (ps[0] || {}).id || null;
+  const kurzNames = PLAN.filter(g => g.short).map(g => g.name).join(', ');
+  return `<section><h2>Training</h2><h3>Wer trainiert?</h3>
+      <div class="chips">${ps.map(p => `<button class="chip ${p.id === S.trPid ? 'on' : ''}" data-act="trPid" data-v="${p.id}">${esc(p.name)}</button>`).join('') || '<span class="muted small">Lege zuerst unter „Spielen“ einen Spieler an.</span>'}</div></section>
+    <section><h3>Trainingsplan</h3>
+      <div class="row"><button class="btn primary grow big" data-act="planStart" data-v="voll" ${S.trPid ? '' : 'disabled'}>Komplett · ca. 2 h</button><button class="btn grow big" data-act="planStart" data-v="kurz" ${S.trPid ? '' : 'disabled'}>Kurz · ca. 25 min</button></div>
+      <p class="muted small" style="margin:0">Komplett: Warm-Up und alle 10 Spiele. Kurz: 3 Minuten Warm-Up, dann ${esc(kurzNames)} mit weniger Runden. Beide fließen in dieselbe Statistik.</p>
+      ${S.trPid ? planTable(S.trPid) : ''}</section>
+    <section><h3>Einzelne Übungen</h3><div class="list">${Object.entries(TR).map(([k, d]) => `<button class="li ${k === S.trSel ? 'sel' : ''}" data-act="trSel" data-v="${k}"><span class="grow two"><span>${esc(d.name)}</span><br><span class="muted small">${esc(d.desc)}</span></span></button>`).join('')}</div>
+      ${def.variants ? `<div class="seg">${def.variants.map(([k, l]) => `<button class="${S.trVar === k ? 'on' : ''}" data-act="trVar" data-v="${k}">${l}</button>`).join('')}</div>` : ''}
+      <button class="btn block" data-act="trStart" ${S.trPid ? '' : 'disabled'}>${esc(def.name)} starten</button></section>`;
+}
+
+// ---------- Ansichten: Statistik
+function vStats() {
+  const ps = profiles();
+  if (!ps.length) return `<section><h2>Statistik</h2><p class="muted">Sobald du unter „Spielen“ Spieler anlegst und spielst, erscheinen hier Averages, Checkout-Quote und dein Trainingsfortschritt.</p></section>`;
+  if (!S.statPid || !Store.data.profiles[S.statPid]) S.statPid = ps[0].id;
+  const pid = S.statPid, pr = Store.data.profiles[pid];
+  if (S.statMatch) return vStatMatch();
+  const ms = Store.list('matches').filter(m => m.players && m.players.includes(pid) && m.stats).sort((a, b) => a.date - b.date);
+  const xs = ms.filter(m => m.type === 'x01'), cs = ms.filter(m => m.type === 'cricket');
+  const me = m => m.stats.find(s => s.pid === pid) || {};
+  const sum = k => xs.reduce((a, m) => a + (me(m)[k] || 0), 0);
+  const pts = sum('pts'), darts = sum('darts'), f9p = sum('f9p'), f9d = sum('f9d');
+  const wins = ms.filter(m => m.players[m.winner] === pid).length;
+  const hi = Math.max(0, ...xs.map(m => me(m).hi || 0)), bests = xs.map(m => me(m).best).filter(x => x != null);
+  const cMarks = cs.reduce((a, m) => a + (me(m).marks || 0), 0), cDarts = cs.reduce((a, m) => a + (me(m).darts || 0), 0);
+  const groups = {}; Store.list('trainings').filter(t => t.pid === pid).forEach(t => { const k = t.mode + '|' + (t.variant || ''); (groups[k] = groups[k] || []).push(t) });
+  const lp = pr.wdv && L ? L.byName[pr.wdv] : null;
+  return `<section><h2>Statistik</h2><div class="chips">${ps.map(p => `<button class="chip ${p.id === pid ? 'on' : ''}" data-act="statPid" data-v="${p.id}">${esc(p.name)}</button>`).join('')}</div></section>
+    <section><h3>X01 · ${xs.length} Spiele · ${wins} Siege gesamt</h3>
+      <div class="kpis"><div class="kpi"><b>${fmt(darts ? pts / darts * 3 : null, 1)}</b><span>Ø 3 Darts</span></div><div class="kpi"><b>${fmt(f9d ? f9p / f9d * 3 : null, 1)}</b><span>First 9</span></div>
+        <div class="kpi"><b>${sum('att') ? pct(sum('hit'), sum('att')) : '–'}</b><span>Checkout</span></div><div class="kpi"><b>${sum('s180')}</b><span>180er</span></div>
+        <div class="kpi"><b>${sum('s140')}</b><span>140+</span></div><div class="kpi"><b>${hi || '–'}</b><span>High Finish</span></div><div class="kpi"><b>${bests.length ? Math.min(...bests) : '–'}</b><span>Bestes Leg</span></div>
+        <div class="kpi"><b>${cs.length ? fmt(cDarts ? cMarks / cDarts * 3 : null, 2) : '–'}</b><span>Cricket MPR</span></div><div class="kpi"><b>${ms.length}</b><span>Spiele gesamt</span></div></div>
+      <div class="card"><h3 style="margin-bottom:8px">Average pro Spiel</h3>${chart(xs.filter(m => me(m).avg != null).slice(-30).map(m => ({ x: dShort(m.date), y: me(m).avg })), { label: 'Average pro Spiel' })}</div></section>
+    ${lp ? `<section><h3>Liga · ${esc(lp.name)}</h3><div class="kpis"><div class="kpi"><b>${fmt(lp.avg, 1)}</b><span>Ø Liga</span></div><div class="kpi"><b>${lp.singW}-${lp.sing - lp.singW}</b><span>Einzel</span></div><div class="kpi"><b>${lp.best ?? '–'}</b><span>Bestes Leg</span></div></div><button class="link" data-act="lplayerGo" data-v="${esc(lp.name)}">Liga-Verlauf ansehen →</button></section>` : ''}
+    ${planSessions(pid).length ? `<section><h3>Trainingsplan</h3>${planCharts(pid)}</section>` : ''}
+    <section><h3>Einzelne Übungen</h3>${Object.keys(groups).filter(k => TR[k.split('|')[0]]).length ? Object.entries(groups).map(([k, list]) => {
+      list.sort((a, b) => a.date - b.date); const [mode, v] = k.split('|'), d = TR[mode]; if (!d) return '';
+      const vals = list.map(x => x.metric), best = d.better === 'low' ? Math.min(...vals) : Math.max(...vals);
+      const vn = v && d.variants ? (d.variants.find(x => x[0] === v) || [, v])[1] : '';
+      return `<div class="card"><div class="bar"><span>${esc(d.name)}${vn ? ' · ' + esc(vn) : ''}</span><span class="cap">${list.length}× · Best ${trMetric(mode, best)} · zuletzt ${trMetric(mode, vals[vals.length - 1])}</span></div>
+        ${chart(list.slice(-30).map(x => ({ x: dShort(x.date), y: x.metric })), { h: 140, label: d.name, fy: trFy(mode) })}</div>`;
+    }).join('') : '<p class="muted small" style="margin:0">Noch keine Trainings gespeichert.</p>'}</section>
+    <section><h3>Letzte Spiele</h3><div class="list">${ms.slice(-15).reverse().map(m => { const s = me(m), w = m.players[m.winner] === pid; return `<button class="li" data-act="statMatch" data-v="${m.id}"><span class="cap" style="width:40px">${dShort(m.date)}</span><span class="grow">${m.type === 'x01' ? m.start : 'Cricket'} vs. ${m.players.filter(x => x !== pid).map(x => esc(pname(x))).join(', ') || 'Solo'}</span><span class="pill ${w ? 'w' : 'l'}">${w ? 'S' : 'N'}</span><span class="score">${m.type === 'x01' ? fmt(s.avg, 1) : fmt(s.mpr, 2)}</span></button>` }).join('') || '<div class="li muted">Noch keine Spiele.</div>'}</div></section>
+    <section><button class="link" data-act="manage">${S.manage ? 'Bearbeiten schließen' : 'Spieler bearbeiten'}</button>${S.manage ? vManage(pr, pid) : ''}</section>`;
+}
+function vManage(pr, pid) {
+  const opts = L ? L.players.slice().sort((a, b) => (a.team === S.team) !== (b.team === S.team) ? (a.team === S.team ? -1 : 1) : a.name.localeCompare(b.name, 'de')) : [];
+  return `<div class="card" style="display:flex;flex-direction:column;gap:12px"><label class="f">Name<div class="row"><input type="text" id="rename" class="grow" value="${esc(pr.name)}" maxlength="30"><button class="btn" data-act="rename" data-v="${pid}">Speichern</button></div></label>
+    <label class="f">Mit WDV-Spieler verknüpfen<select id="wdvlink" data-chg="wdvlink" data-v="${pid}"><option value="">– keiner –</option>${opts.map(p => `<option value="${esc(p.name)}" ${pr.wdv === p.name ? 'selected' : ''}>${esc(p.name)} (${esc(p.team)})</option>`).join('')}</select></label>
+    ${S.delAsk === pid ? `<div class="note warn row"><span class="grow">${esc(pr.name)} löschen? Gespeicherte Spiele bleiben erhalten.</span><button class="btn danger" data-act="delYes" data-v="${pid}">Löschen</button><button class="btn" data-act="delNo">Behalten</button></div>` : `<button class="btn danger" data-act="delAsk" data-v="${pid}">Spieler löschen</button>`}</div>`;
+}
+function vStatMatch() {
+  const m = Store.data.matches[S.statMatch]; if (!m) { S.statMatch = null; return vStats() }
+  const isX = m.type === 'x01';
+  return `<section><button class="link" data-act="statMatchBack">← Zurück</button><span class="cap">${new Date(m.date).toLocaleString('de-AT', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+    <h2>${isX ? m.start : 'Cricket'} · First to ${m.legsToWin}</h2>
+    <div class="tbl"><table><thead><tr><th>Spieler</th><th class="c">Legs</th>${isX ? '<th class="r">Ø</th><th class="r">First 9</th><th class="r">Checkout</th><th class="r">180</th><th class="r">High Finish</th><th class="r">Bestes Leg</th>' : '<th class="r">MPR</th>'}</tr></thead><tbody>
+    ${m.stats.map((s, i) => `<tr class="${i === m.winner ? 'me' : ''}"><td>${esc(pname(s.pid))}</td><td class="c mono">${s.legsW}</td>${isX ? `<td class="n">${fmt(s.avg, 1)}</td><td class="n">${fmt(s.f9, 1)}</td><td class="n">${s.att ? pct(s.hit, s.att) : '–'}</td><td class="n">${s.s180}</td><td class="n">${s.hi || '–'}</td><td class="n">${s.best ?? '–'}</td>` : `<td class="n">${fmt(s.mpr, 2)}</td>`}</tr>`).join('')}
+    </tbody></table></div>
+    <button class="btn danger" data-act="delMatch" data-v="${m.id}">${S.delAsk === m.id ? 'Wirklich löschen? Nochmal tippen' : 'Spiel löschen'}</button></section>`;
+}
+
+// ---------- Ansicht: Einstellungen
+function vSettings() {
+  const st = { ok: 'Verbunden. Spiele und Trainings werden auf allen Geräten gespeichert.', offline: 'Gerade keine Verbindung. Alles wird lokal gesichert und später übertragen.', badkey: 'Der App-Schlüssel stimmt nicht.', nokey: 'Noch kein App-Schlüssel eingetragen. Bis dahin wird nur auf diesem Gerät gespeichert.', lokal: 'Verbinde …' }[Store.state];
+  return `<section><button class="link" data-act="tab" data-t="liga">← Zurück</button><h2>Einstellungen</h2></section>
+    <section><h3>Geräte verbinden</h3><div class="note ${Store.state === 'ok' ? '' : 'warn'}">${st}${Store.outbox.length ? ` (${Store.outbox.length} noch nicht übertragen)` : ''}</div>
+      <label class="f">App-Schlüssel<div class="row"><input type="password" id="appkey" class="grow" value="${esc(Store.key)}" autocomplete="off" placeholder="Schlüssel eingeben"><button class="btn primary" data-act="saveKey">Verbinden</button></div></label>
+      <p class="muted small" style="margin:0">Trag auf jedem Gerät denselben Schlüssel ein, dann siehst du überall dieselben Spieler, Spiele und Trainings.</p></section>
+    <section><h3>Mein Team</h3><select id="myteam" data-chg="myteam">${(L ? L.teams : [{ name: S.team }]).map(t => `<option ${t.name === S.team ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></section>
+    <section><h3>Auf den Homescreen</h3><p class="muted" style="margin:0">iPhone: in Safari auf Teilen tippen, dann „Zum Home-Bildschirm“. Android: im Chrome-Menü „App installieren“ oder „Zum Startbildschirm hinzufügen“.</p></section>
+    <section><h3>Liga-Daten</h3><p class="muted" style="margin:0">${L ? 'Stand ' + new Date(L.aktualisiert).toLocaleString('de-AT') + '. ' : ''}Werden täglich automatisch geholt, donnerstags und freitags zusätzlich abends. Mit dem Pfeil oben rechts jederzeit sofort.</p></section>`;
+}
+
+// ---------- Rendern
+function render() {
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.t === S.tab));
+  const views = { liga: vLiga, spielen: vSpielen, training: vTraining, stats: vStats, settings: vSettings };
+  $('#app').innerHTML = views[S.tab]();
+  $('#stamp').innerHTML = L ? 'Liga-Stand<br>' + esc(new Date(L.aktualisiert).toLocaleString('de-AT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })) : '';
+  $('#refreshBtn').classList.toggle('spin', S.refreshing);
+}
+function softRender() {
+  const a = document.activeElement;
+  if (a && (a.tagName === 'INPUT' || a.tagName === 'SELECT')) return;
+  if ((S.tab === 'spielen' && S.live && !S.live.done) || (S.tab === 'training' && ((S.tr && !S.tr.done) || (S.plan && S.plan.i < S.plan.steps.length)))) return;
+  render();
+}
+const A = {
+  tab: d => { S.tab = d.t; if (d.t !== 'settings') LS.set('darts.tab', S.tab); S.report = null; S.lplayer = null; S.statMatch = null; window.scrollTo(0, 0) },
+  refreshLiga: () => { refreshLiga() },
+  liga: d => { S.liga = d.v; if (d.v === 'team') S.viewTeam = null },
+  team: d => { S.liga = 'team'; S.viewTeam = d.v || null; S.report = null; S.lplayer = null; window.scrollTo(0, 0) },
+  setTeam: d => { S.team = d.v; S.viewTeam = null; LS.set('darts.team', S.team); toast('Mein Team: ' + d.v) },
+  round: d => S.round = +d.v,
+  reportBy: d => { const s = L.spiele.find(x => x.heim + '|' + x.gast === d.v); if (s && s.bericht) { S.report = s.bericht; window.scrollTo(0, 0) } else toast('Für dieses Spiel gibt es noch keinen Spielbericht.') },
+  rback: () => { S.report = null },
+  lplayer: d => { S.lplayer = d.v; window.scrollTo(0, 0) },
+  lplayerGo: d => { S.tab = 'liga'; S.lplayer = d.v; window.scrollTo(0, 0) },
+  lback: () => { S.lplayer = null },
+  lsort: d => S.lsort = d.v, lfilter: d => S.lfilter = d.v,
+  togglePlayer: d => { const p = S.setup.players, i = p.indexOf(d.v); i >= 0 ? p.splice(i, 1) : p.push(d.v); LS.set('darts.setup', S.setup) },
+  addProfile: () => { const el = $('#newp'), n = el.value.trim(); if (!n) return toast('Bitte einen Namen eingeben.'); if (profiles().some(p => p.name.toLowerCase() === n.toLowerCase())) return toast(n + ' gibt es schon.'); const id = uid(); Store.put('profiles', id, { name: n, created: Date.now() }); S.setup.players.push(id); LS.set('darts.setup', S.setup); toast(n + ' angelegt') },
+  shuffle: () => { const p = S.setup.players; for (let i = p.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[p[i], p[j]] = [p[j], p[i]] } LS.set('darts.setup', S.setup) },
+  mode: d => { S.setup.type = d.t; if (d.t === 'x01') S.setup.start = +d.s; LS.set('darts.setup', S.setup) },
+  legs: d => { S.setup.legs = +d.v; LS.set('darts.setup', S.setup) },
+  out: d => { S.setup.out = d.v; LS.set('darts.setup', S.setup) },
+  input: d => { S.setup.input = d.v; LS.set('darts.setup', S.setup) },
+  startMatch: () => { S.setup.players = S.setup.players.filter(id => Store.data.profiles[id]); if (!S.setup.players.length) return; S.live = newMatch(S.setup); S.mod = 'S'; S.entry = ''; S.abortAsk = false; saveLive(); window.scrollTo(0, 0) },
+  mod: d => S.mod = S.mod === d.v && d.v !== 'S' ? 'S' : d.v,
+  dart: d => { const m = S.live, n = +d.v; if (n === 25 && S.mod === 'T') return; (m.type === 'x01' ? x01Dart : crDart)(m, n === 0 ? 'M' : S.mod + n); S.mod = 'S' },
+  undo: () => { undoMatch(S.live); S.entry = '' },
+  toggleInput: () => { const m = S.live; if (m.pending.length) return toast('Erst die laufende Aufnahme beenden.'); m.input = m.input === 'dart' ? 'visit' : 'dart'; S.entry = ''; saveLive(); toast(m.input === 'dart' ? 'Eingabe pro Dart' : 'Eingabe pro Aufnahme') },
+  key: d => { if (d.v === 'del') S.entry = S.entry.slice(0, -1); else if (S.entry.length < 3) S.entry = (S.entry + d.v).replace(/^0+(?=\d)/, '') },
+  quick: d => { S.entry = d.v; A.visitOk() },
+  visitOk: () => {
+    const m = S.live, v = +S.entry || 0; S.entry = '';
+    if (v > 180 || BAD_VISIT.includes(v)) return toast(v + ' ist mit 3 Darts nicht möglich.');
+    const leg = curLeg(m), rem = remOf(m, leg, turnOf(m, leg));
+    if (v === rem) {
+      const ok = m.out === 'single' || (v <= 170 && !BOGEY.includes(v) && (m.out !== 'double' || checkout(v, 3)));
+      if (!ok) { leg.visits.push({ p: turnOf(m, leg), darts: null, score: 0, bust: true, n: 3, att: 0, co: false }); toast(v + ' ist kein mögliches Finish – überworfen'); return saveLive() }
+      let min = 3; if (m.out === 'double') { for (let k = 1; k <= 3; k++) if (checkout(v, k)) { min = k; break } } else min = v <= 60 ? 1 : v <= 120 ? 2 : 3;
+      S.ask = { score: v, min }; return;
+    }
+    x01Visit(m, v, 3);
+  },
+  coDarts: d => { const v = S.ask.score; S.ask = null; x01Visit(S.live, v, +d.v) },
+  coCancel: () => S.ask = null,
+  abort: () => S.abortAsk = true, abortNo: () => S.abortAsk = false,
+  abortYes: () => { S.live = null; S.abortAsk = false; LS.del('darts.live') },
+  rematch: () => { const m = S.live; S.live = newMatch({ type: m.type, start: m.start, legs: m.legsToWin, out: m.out, input: m.input, players: [...m.players.slice(1), m.players[0]] }); saveLive() },
+  newGame: () => { S.live = null; LS.del('darts.live') },
+  fixLast: () => { const m = S.live; Store.del('matches', m.id); delete m.done; delete m.stats; m.winner = null; m.finishedAt = null; undoMatch(m) },
+  trSel: d => { S.trSel = d.v; S.trVar = null }, trVar: d => S.trVar = d.v, trPid: d => S.trPid = d.v,
+  trStart: () => { const def = TR[S.trSel]; S.tr = { id: uid(), mode: S.trSel, variant: def.variants ? S.trVar : null, pid: S.trPid, st: def.init(), log: [] }; S.entry = ''; saveTr(); window.scrollTo(0, 0) },
+  trIn: d => trInput(S.tr, d.v),
+  trQuick: d => { S.entry = d.v; A.trOk() },
+  trOk: () => { const v = +S.entry || 0; S.entry = ''; if (v > 180 || BAD_VISIT.includes(v)) return toast(v + ' ist mit 3 Darts nicht möglich.'); trInput(S.tr, v) },
+  trUndo: () => { const t = S.tr; if (t.log.length) { t.st = t.log.pop(); saveTr() } },
+  trAbort: () => { S.tr = null; LS.del('darts.trlive') },
+  trAgain: () => { const t = S.tr; S.tr = { id: uid(), mode: t.mode, variant: t.variant, pid: t.pid, st: TR[t.mode].init(), log: [] }; saveTr() },
+  trClose: () => { S.tr = null; LS.del('darts.trlive') },
+  planStart: d => { if (!S.trPid) return; S.plan = { id: uid(), variant: d.v, pid: S.trPid, date: Date.now(), steps: ['warm', ...PLAN.filter(g => d.v === 'voll' || g.short).map(g => g.id)], i: 0, cur: [], results: {}, warmEnd: null }; S.entry = ''; S.planAbortAsk = false; savePlan(); window.scrollTo(0, 0) },
+  planWarm: d => { S.plan.warmEnd = Date.now() + d.v * 60000; savePlan() },
+  planNext: () => { S.plan.i++; S.plan.cur = []; savePlan(); window.scrollTo(0, 0) },
+  planIn: d => planInput(S.plan, +d.v),
+  planQuick: d => { S.entry = d.v; A.planOk() },
+  planOk: () => { const v = +S.entry || 0; S.entry = ''; if (v > 180 || BAD_VISIT.includes(v)) return toast(v + ' ist mit 3 Darts nicht möglich.'); planInput(S.plan, v) },
+  planUndo: () => { S.plan.cur.pop(); savePlan() },
+  planSkip: () => { S.plan.i++; S.plan.cur = []; S.plan.bo = null; savePlan(); window.scrollTo(0, 0) },
+  planBo: d => { S.plan.bo = { ...(S.plan.bo || {}), win: d.v === '1', avg: ($('#boavg') || {}).value } ; savePlan() },
+  planBoSave: () => { const p = S.plan, bo = p.bo || {}, avg = parseFloat(($('#boavg').value || '').replace(',', '.')); if (bo.win == null) return toast('Bitte Gewonnen oder Verloren wählen.'); if (isNaN(avg)) return toast('Bitte deinen Average eintragen.'); p.cur = [avg]; p.bo = null; planFinishGame(p, planGame('bo11'), bo11Pts(bo.win, avg)) },
+  planAbort: () => S.planAbortAsk = true, planAbortNo: () => S.planAbortAsk = false,
+  planAbortYes: () => { S.plan = null; S.planAbortAsk = false; LS.del('darts.plan') },
+  planClose: () => { S.plan = null; LS.del('darts.plan') },
+  statPid: d => { S.statPid = d.v; S.delAsk = null },
+  statMatch: d => { S.statMatch = d.v; S.delAsk = null; window.scrollTo(0, 0) }, statMatchBack: () => S.statMatch = null,
+  delMatch: d => { if (S.delAsk === d.v) { Store.del('matches', d.v); S.statMatch = null; S.delAsk = null; toast('Spiel gelöscht') } else S.delAsk = d.v },
+  manage: () => { S.manage = !S.manage; S.delAsk = null },
+  rename: d => { const n = $('#rename').value.trim(); if (!n) return; Store.put('profiles', d.v, { ...clone(Store.data.profiles[d.v]), name: n }); toast('Gespeichert') },
+  delAsk: d => S.delAsk = d.v, delNo: () => S.delAsk = null,
+  delYes: d => { Store.del('profiles', d.v); S.setup.players = S.setup.players.filter(x => x !== d.v); LS.set('darts.setup', S.setup); S.statPid = null; S.delAsk = null; toast('Spieler gelöscht') },
+  saveKey: () => { Store.key = $('#appkey').value.trim(); LS.set('darts.key', Store.key); Store.state = 'lokal'; Store.sync().then(() => { render(); toast(Store.state === 'ok' ? 'Verbunden' : Store.state === 'badkey' ? 'Schlüssel stimmt nicht' : 'Keine Verbindung') }) }
+};
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+  const f = A[b.dataset.act]; if (!f) return;
+  f(b.dataset, b, e); render();
+});
+document.addEventListener('change', e => {
+  const el = e.target;
+  if (el.dataset.chg === 'wdvlink') { const pid = el.dataset.v; Store.put('profiles', pid, { ...clone(Store.data.profiles[pid]), wdv: el.value || null }); toast(el.value ? 'Verknüpft mit ' + el.value : 'Verknüpfung entfernt'); render() }
+  if (el.dataset.chg === 'myteam') { A.setTeam({ v: el.value }); render() }
+});
+document.addEventListener('keydown', e => {
+  if (e.target.id === 'newp' && e.key === 'Enter') { A.addProfile(); render() }
+  if (e.target.id === 'appkey' && e.key === 'Enter') { A.saveKey() }
+  const planVisit = S.tab === 'training' && S.plan && S.plan.i < S.plan.steps.length && (planGame(S.plan.steps[S.plan.i]) || {}).input === 'visit';
+  const visitPad = planVisit || (S.tab === 'spielen' && S.live && !S.live.done && S.live.input === 'visit' && !S.ask) || (S.tab === 'training' && !S.plan && S.tr && !S.tr.done && S.tr.mode === 'scoring');
+  if (!visitPad || e.target.tagName === 'INPUT') return;
+  if (/^\d$/.test(e.key)) { A.key({ v: e.key }); render() }
+  else if (e.key === 'Backspace') { A.key({ v: 'del' }); render() }
+  else if (e.key === 'Enter') { (planVisit ? A.planOk : S.tab === 'spielen' ? A.visitOk : A.trOk)(); render() }
+});
+// Beim Zurückkehren in die App frische Daten holen (andere Geräte, neue Liga-Daten)
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { Store.sync(); loadLiga() } });
+window.addEventListener('online', () => Store.sync());
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+Store.init();
+render();
+loadLiga();
+</script>
+</body>
+</html>
