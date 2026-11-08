@@ -896,7 +896,7 @@ function softRender() {
 }
 const A = {
   tab: d => { S.tab = d.t; if (d.t !== 'settings') LS.set('darts.tab', S.tab); S.report = null; S.lplayer = null; S.statMatch = null; window.scrollTo(0, 0) },
-  refreshLiga: () => { refreshLiga() },
+  refreshLiga: () => { refreshLiga(); Store.sync() },
   liga: d => { S.liga = d.v; if (d.v === 'team') S.viewTeam = null },
   team: d => { S.liga = 'team'; S.viewTeam = d.v || null; S.report = null; S.lplayer = null; window.scrollTo(0, 0) },
   setTeam: d => { S.team = d.v; S.viewTeam = null; LS.set('darts.team', S.team); toast('Mein Team: ' + d.v) },
@@ -1011,6 +1011,11 @@ document.addEventListener('keydown', e => {
 // Beim Zurückkehren in die App frische Daten holen (andere Geräte, neue Liga-Daten)
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { Store.sync(); loadLiga() } });
 window.addEventListener('online', () => Store.sync());
+// Am Laptop bleibt das Fenster oft offen: beim Zurückwechseln und jede Minute nachsehen, was andere Geräte gespeichert haben
+let lastSync = 0;
+const syncSoon = () => { if (document.visibilityState === 'visible' && Date.now() - lastSync > 15000) { lastSync = Date.now(); Store.sync() } };
+window.addEventListener('focus', syncSoon);
+setInterval(syncSoon, 60000);
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 Store.init();
 render();
