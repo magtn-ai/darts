@@ -107,6 +107,19 @@ button.li:hover{background:rgba(60,61,64,.5)}
 .chart .ar{fill:var(--ice);opacity:.1}
 .chart .pt{fill:var(--ice)} .chart .end{fill:var(--void);stroke:var(--ice);stroke-width:2.5}
 .chart .goal{stroke:var(--fog);stroke-width:1;stroke-dasharray:4 4}
+.radar{max-width:480px;margin:0 auto;display:block}
+.radar .ax{font-family:var(--f-ui);font-size:13px}
+.radar .rval{fill:var(--paper);font-family:var(--f-mono)}
+.radar .ar{opacity:.14}
+.radar .rprev{fill:none;stroke:var(--fog);stroke-width:1.5;stroke-dasharray:3 3}
+.radar .pt{stroke:var(--charcoal);stroke-width:2}
+.legend{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 16px;font-size:12px;color:var(--fog);margin-top:6px}
+.legend span{display:flex;align-items:center;gap:6px}
+.legend i{display:inline-block;width:16px;height:0;border-top:2px solid var(--ice)}
+.legend .lg-prev{border-top:1.5px dashed var(--fog)}
+.legend .lg-goal{border-top:1px dashed var(--fog)}
+.rgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rgrid .card{display:flex;flex-direction:column;gap:4px;font-size:13px}
 .good{color:var(--ice)}
 .chart .lbl{fill:var(--paper);font-size:13px;font-weight:500;font-family:var(--f-mono)}
 .heat td.v{font-family:var(--f-mono);text-align:center;font-size:13px}
@@ -652,6 +665,56 @@ function chart(pts, { h = 170, fy = v => fmt(v, 1), label = 'Verlauf', goal = nu
     <text class="ax" x="${pl}" y="${H - 6}">${esc(pts[0].x)}</text><text class="ax" x="${W - pr}" y="${H - 6}" text-anchor="end">${esc(last.x)}</text></svg>`;
 }
 
+// Stärken/Schwächen: jeder Bereich in % vom Ziel (Ziele wie im Trainingsplan), Kurz-Sessions hochgerechnet.
+// "aktuell" = Schnitt der letzten 5 Einträge, "davor" = die 5 davor.
+const RADAR = [
+  ['power', 'Scoring'], ['treble', 'Treble'], ['bull', 'Bull'], ['co1', 'Check-Out I'], ['co2', 'Check-Out II'], ['co25', '25er Out'],
+  ['d40', '40er'], ['d32', '32er'], ['d24', '24er'], ['dbl', 'Doppelquote'], ['comatch', 'Checkout Spiel'], ['bo11', 'Best of 11']
+];
+function radarData(pid) {
+  const s = {}; const add = (k, date, pct) => (s[k] = s[k] || []).push({ date, pct });
+  planSessions(pid).forEach(x => Object.entries(x.results).forEach(([k, r]) => add(k === 'switch' ? 'treble' : k, x.date, r.fe / planGame(k).goal * 100)));
+  Store.list('trainings').filter(t => t.pid === pid).forEach(t => {
+    if (t.mode === 'dbl') add('dbl', t.date, t.metric / 33 * 100);              // Ziel: jedes dritte Doppel
+    if (t.mode === 'treble' && t.extra) add('treble', t.date, t.extra.triple / 7.5 * 100); // Ziel: 25 % Triple
+    if (t.mode === 'scoring') add('power', t.date, t.metric / planGame('power').goal * 100);
+  });
+  Store.list('matches').filter(m => m.type === 'x01' && m.stats && m.players.includes(pid)).forEach(m => { const st = m.stats.find(x => x.pid === pid); if (st && st.att) add('comatch', m.date, st.hit / st.att / .33 * 100) });
+  return RADAR.filter(([k]) => s[k]).map(([k, name]) => {
+    const l = s[k].sort((a, b) => a.date - b.date), avg = a => a.reduce((x, y) => x + y.pct, 0) / a.length;
+    return { k, name, n: l.length, cur: avg(l.slice(-5)), prev: l.length > 5 ? avg(l.slice(-10, -5)) : null };
+  });
+}
+function radar(ax) {
+  const W = 460, H = 330, cx = 230, cy = 166, R = 112, MAX = 150, n = ax.length;
+  const P = (i, v) => { const a = -Math.PI / 2 + i * 2 * Math.PI / n, r = Math.min(v, MAX) / MAX * R; return [cx + r * Math.cos(a), cy + r * Math.sin(a)] };
+  const poly = vals => vals.map((v, i) => P(i, v).map(c => c.toFixed(1)).join(',')).join(' ');
+  let g = [50, 100, 150].map(v => `<polygon class="${v === 100 ? 'goal' : 'grid'}" fill="none" points="${poly(ax.map(() => v))}"/>`).join('');
+  g += ax.map((_, i) => { const [x, y] = P(i, MAX); return `<line class="grid" x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}"/>` }).join('');
+  const showPrev = ax.every(a => a.prev != null);
+  const prev = showPrev ? `<polygon class="rprev" points="${poly(ax.map(a => a.prev))}"/>` : '';
+  const cur = `<polygon class="ar" points="${poly(ax.map(a => a.cur))}"/><polygon class="ln" points="${poly(ax.map(a => a.cur))}"/>`;
+  const dots = ax.map((a, i) => { const [x, y] = P(i, a.cur); return `<circle class="pt" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4"/><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="14" fill="transparent"><title>${esc(a.name)}: ${Math.round(a.cur)} % vom Ziel (${a.n} Einträge)</title></circle>` }).join('');
+  const labels = ax.map((a, i) => {
+    const [x, y] = P(i, MAX + 22), anc = x > cx + 8 ? 'start' : x < cx - 8 ? 'end' : 'middle', dy = y < cy - R ? -4 : y > cy + R ? 12 : 4;
+    return `<text class="ax" x="${x.toFixed(1)}" y="${(y + dy).toFixed(1)}" text-anchor="${anc}">${esc(a.name)} <tspan class="rval">${Math.round(a.cur)}%</tspan></text>`;
+  }).join('');
+  return `<svg class="chart radar" viewBox="0 0 ${W} ${H}" role="img" aria-label="Stärken und Schwächen in Prozent vom Ziel">${g}${prev}${cur}${dots}${labels}</svg>
+    <div class="legend"><span><i class="lg-cur"></i>Aktuell (letzte 5)</span>${showPrev ? '<span><i class="lg-prev"></i>Die 5 davor</span>' : ''}<span><i class="lg-goal"></i>Ziel = 100 %</span></div>`;
+}
+function vRadar(pid) {
+  const ax = radarData(pid);
+  if (ax.length < 3) return `<section><h3>Stärken & Schwächen</h3><p class="muted small" style="margin:0">Sobald du in mindestens drei Bereichen trainiert hast (Trainingsplan, Doppel-Quote, Treble-Training, Spiele), erscheint hier dein Spinnennetz.</p></section>`;
+  const sorted = [...ax].sort((a, b) => b.cur - a.cur), k = ax.length >= 6 ? 3 : 2;
+  const item = a => `<span class="mono" style="color:var(--paper)">${Math.round(a.cur)}%</span> ${esc(a.name)}${a.prev != null ? ` <span class="muted small">${a.cur >= a.prev ? '↑' : '↓'} ${Math.abs(Math.round(a.cur - a.prev))}</span>` : ''}`;
+  return `<section><h3>Stärken & Schwächen</h3><div class="card">${radar(ax)}</div>
+    <div class="rgrid"><div class="card"><span class="cap">Stärken</span>${sorted.slice(0, k).map(a => `<div>${item(a)}</div>`).join('')}</div>
+      <div class="card"><span class="cap">Woran arbeiten</span>${sorted.slice(-k).reverse().map(a => `<div>${item(a)}</div>`).join('')}</div></div>
+    <details><summary class="muted small">Alle Werte</summary><div class="tbl"><table><thead><tr><th>Bereich</th><th class="r">Aktuell</th><th class="r">Davor</th><th class="r">Einträge</th></tr></thead><tbody>
+      ${sorted.map(a => `<tr><td>${esc(a.name)}</td><td class="n">${Math.round(a.cur)} %</td><td class="n">${a.prev != null ? Math.round(a.prev) + ' %' : '–'}</td><td class="n">${a.n}</td></tr>`).join('')}</tbody></table></div></details>
+    <p class="muted small" style="margin:0">Alles in % vom Ziel aus dem Trainingsplan. Doppelquote: Ziel 33 %, Treble-Training: Ziel 25 % Triple, Checkout im Spiel: Ziel 33 %.</p></section>`;
+}
+
 // ---------- Ansichten: Liga
 function vLiga() {
   if (!L) return LIGA_ERR
@@ -944,6 +1007,7 @@ function vStats() {
   const groups = {}; Store.list('trainings').filter(t => t.pid === pid).forEach(t => { const k = t.mode + '|' + (t.variant || ''); (groups[k] = groups[k] || []).push(t) });
   const lp = pr.wdv && L ? L.byName[pr.wdv] : null;
   return `<section><h2>Statistik</h2><div class="chips">${ps.map(p => `<button class="chip ${p.id === pid ? 'on' : ''}" data-act="statPid" data-v="${p.id}">${esc(p.name)}</button>`).join('')}</div></section>
+    ${vRadar(pid)}
     <section><h3>X01 · ${xs.length} Spiele · ${wins} Siege gesamt</h3>
       <div class="kpis"><div class="kpi"><b>${fmt(darts ? pts / darts * 3 : null, 1)}</b><span>Ø 3 Darts</span></div><div class="kpi"><b>${fmt(f9d ? f9p / f9d * 3 : null, 1)}</b><span>First 9</span></div>
         <div class="kpi"><b>${sum('att') ? pct(sum('hit'), sum('att')) : '–'}</b><span>Checkout</span></div><div class="kpi"><b>${sum('s180')}</b><span>180er</span></div>
