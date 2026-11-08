@@ -30,6 +30,7 @@
 html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);background:var(--void)}
 body{margin:0;background:var(--void);color:var(--paper);font-family:var(--f-ui);font-size:14px;line-height:1.5;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-bottom:calc(72px + env(safe-area-inset-bottom,0px));-webkit-tap-highlight-color:transparent}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--obsidian)}
+html,body{overscroll-behavior-y:contain}
 [hidden]{display:none!important}
 button,select,input{font:inherit;color:inherit}
 button{cursor:pointer}
@@ -142,6 +143,16 @@ button.li:hover{background:rgba(60,61,64,.5)}
 .tbtns button{height:64px;font-size:16px;font-weight:500;border-radius:var(--r-sm);border:1px solid var(--iron);background:var(--charcoal)}
 .tbtns .hit{border-color:var(--ice);color:var(--ice);background:var(--ice-08)}
 .tbtns .miss{background:var(--graphite);color:var(--fog)}
+.tbtns button:active,.quick button:active,.btn:active{background:var(--slate)}
+/* Tipp-Feedback: Rand leuchtet kurz in Ice auf */
+.flash{animation:flash .45s ease-out}
+@keyframes flash{0%{box-shadow:0 0 0 2px var(--ice),0 0 14px rgba(131,195,255,.45)}100%{box-shadow:0 0 0 2px transparent,0 0 0 transparent}}
+/* Nach unten ziehen zum Aktualisieren */
+#ptr{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:7;width:36px;height:36px;margin-left:-18px;border-radius:50%;background:var(--graphite);box-shadow:var(--ring);display:grid;place-items:center;opacity:0;transform:translateY(-48px);pointer-events:none}
+#ptr svg{width:18px;height:18px;fill:none;stroke:var(--fog);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#ptr.ready svg{stroke:var(--ice)}
+#ptr.go{transition:transform .2s,opacity .2s}
+#ptr.spin svg{animation:spin 1s linear infinite;stroke:var(--ice)}
 .note{background:var(--graphite);box-shadow:var(--ring);border-radius:var(--r-lg);padding:10px 12px;font-size:14px}
 .note.warn{box-shadow:inset 0 0 0 1px var(--neg)}
 nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--obsidian);border-top:1px solid var(--iron);display:grid;grid-template-columns:repeat(4,1fr);padding:0 max(8px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(8px,env(safe-area-inset-left,0px))}
@@ -177,6 +188,7 @@ nav.tabs svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1
   <button data-act="tab" data-t="stats"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Statistik</button>
 </nav>
 <div id="toast" hidden></div>
+<div id="ptr" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></div>
 
 <script>
 // Adresse des Cloudflare-Helfers (wird beim Einrichten eingetragen)
@@ -237,7 +249,7 @@ const Store = {
   del(c, id) { const o = { ...this.data[c] }; delete o[id]; this.data[c] = o; LS.set('darts.' + c, o); this.queue({ op: 'del', c, id }) }
 };
 const profiles = () => Store.list('profiles').sort((a, b) => a.name.localeCompare(b.name, 'de'));
-const pname = id => (Store.data.profiles[id] || {}).name || 'Unbekannt';
+const pname = id => id === BOT ? 'Bot' : (Store.data.profiles[id] || {}).name || 'Unbekannt';
 
 // ---------- Liga-Daten
 let L = null, LIGA_ERR = false;
@@ -309,7 +321,8 @@ const S = {
   live: LS.get('darts.live', null), mod: 'S', entry: '', ask: null, abortAsk: false,
   plan: LS.get('darts.plan', null), planAbortAsk: false,
   tr: LS.get('darts.trlive', null), trSel: 'atc', trVar: null, trPid: null,
-  statPid: null, manage: false, delAsk: null, statMatch: null
+  statPid: null, manage: false, delAsk: null, statMatch: null,
+  botOff: LS.get('darts.botoff', 0), botLegs: 6
 };
 if (S.tab === 'settings') S.tab = 'liga';
 const saveLive = () => LS.set('darts.live', S.live);
@@ -341,9 +354,68 @@ function checkout(rem, darts = 3) {
   }
   return coMemo[k] = best;
 }
+
+// ---------- Bot-Gegner: wirft Dart für Dart, Trefferquoten hängen am eingestellten Average
+// (per Simulation abgestimmt: Ø 40 → ca. 39, Ø 60 → ca. 59, Ø 80 → ca. 79 über viele Legs)
+const BOT = 'bot';
+const BOARD = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+const nbr = n => { const i = BOARD.indexOf(n); return BOARD[(i + (Math.random() < .5 ? 1 : 19)) % 20] };
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function botAim(t, a) {
+  const r = Math.random(), k = t[0], n = +t.slice(1);
+  if (n === 25) return r < (k === 'D' ? .5 : 1) * clamp((a - 15) * .006, .05, .4) ? t : r < .55 ? (k === 'D' ? 'S25' : 'D25') : 'S' + BOARD[Math.floor(Math.random() * 20)];
+  const p = k === 'T' ? clamp(a * .004, .05, .45) : k === 'D' ? clamp((a - 20) * .0055, .07, .45) : clamp(.75 + a * .002, .75, .95);
+  if (r < p) return t;
+  if (k === 'D') return Math.random() < .5 ? 'S' + n : 'M';
+  if (k === 'T') return Math.random() < .7 ? 'S' + n : 'S' + nbr(n);
+  return 'S' + nbr(n);
+}
+function botDart(before, left, a) {
+  if (before === 50 || (before <= 40 && before % 2 === 0)) return botAim(before === 50 ? 'D25' : 'D' + before / 2, a);
+  const path = before <= 170 && (checkout(before, left) || checkout(before, 3));
+  if (path && before <= 110) return botAim(path[0], a);
+  // Scoring auf T20, so verteilt, dass der Leg-Average inkl. Checkout etwa beim Ziel landet
+  const d = a * 1.19 / 3;
+  let pO = clamp(.6 - a * .007, .03, .6), pT = (d - 20 + 17 * pO) / 40;
+  if (pT < 0) { pT = 0; pO = clamp((20 - d) / 17, 0, .95) }
+  const r = Math.random();
+  return r < pT ? 'T20' : r < pT + pO ? (Math.random() < .15 ? 'T' : 'S') + nbr(20) : 'S20';
+}
+// Spielstärke: Average aus den letzten 10 X01-Spielen, sonst aus dem Scoring-Training (etwas abgezogen, weil ohne Checkout)
+function myAvg(pid) {
+  const xs = Store.list('matches').filter(m => m.type === 'x01' && m.stats && m.players.includes(pid)).sort((a, b) => b.date - a.date).slice(0, 10);
+  let p = 0, d = 0; xs.forEach(m => { const s = m.stats.find(x => x.pid === pid); if (s) { p += s.pts; d += s.darts } });
+  if (d >= 30) return { avg: p / d * 3, src: `aus deinen letzten ${xs.length} Spiel${xs.length > 1 ? 'en' : ''}` };
+  const sc = [...planSessions(pid).filter(s => s.results.power).map(s => s.results.power.pts), ...Store.list('trainings').filter(t => t.pid === pid && t.mode === 'scoring').map(t => t.metric)];
+  if (sc.length) return { avg: sc.reduce((a, b) => a + b, 0) / sc.length * .9, src: 'aus deinem Scoring-Training' };
+  return { avg: 45, src: 'Startwert, bis du ein paar Spiele hast' };
+}
+const botAvg = pid => clamp(Math.round(myAvg(pid).avg) + (S.botOff || 0), 20, 110);
+function botStrengthHtml(pid) {
+  const m = myAvg(pid);
+  return `<div class="row"><button class="btn" data-act="botAdj" data-v="-3" aria-label="Bot schwächer">−</button><div class="grow" style="text-align:center"><span class="mono" style="font-size:22px;color:var(--paper)">Ø ${botAvg(pid)}</span><br><span class="muted small">${S.botOff ? `angepasst, dein Ø ${fmt(m.avg, 1)}` : esc(m.src)}</span></div><button class="btn" data-act="botAdj" data-v="3" aria-label="Bot stärker">+</button></div>`;
+}
+let botT = null;
+const isBotTurn = m => !!(m && !m.done && m.players[turnOf(m, curLeg(m))] === BOT);
+function botTick() {
+  botT = null; const m = S.live;
+  if (!m || m.done || S.tab !== 'spielen' || m.players[turnOf(m, curLeg(m))] !== BOT) return;
+  const before = remOf(m, curLeg(m), turnOf(m, curLeg(m))) - m.pending.reduce((a, x) => a + dartVal(x), 0);
+  x01Dart(m, botDart(before, 3 - m.pending.length, m.bot.avg));
+  render();
+}
+// Zurück mit Bot: dessen Würfe mit zurücknehmen, bis wieder ein eigener Dart weg ist
+function undoWithBot(m) {
+  for (let i = 0; i < 12; i++) {
+    const before = JSON.stringify(m.legs) + m.pending.length; undoMatch(m);
+    if (JSON.stringify(m.legs) + m.pending.length === before) break;
+    if (m.players[turnOf(m, curLeg(m))] !== BOT) break;
+  }
+}
 function newMatch(cfg) {
   return { id: uid(), type: cfg.type, start: cfg.start, out: cfg.out, legsToWin: cfg.legs, input: cfg.type === 'cricket' ? 'dart' : cfg.input,
-    players: [...cfg.players], legs: [{ starter: 0, winner: null, visits: [] }], pending: [], pendAtts: [], winner: null, createdAt: Date.now() };
+    players: [...cfg.players], legs: [{ starter: 0, winner: null, visits: [] }], pending: [], pendAtts: [], winner: null, createdAt: Date.now(),
+    ...(cfg.bot ? { bot: cfg.bot } : {}), ...(cfg.planId ? { planId: cfg.planId } : {}) };
 }
 function x01Dart(m, d) {
   const leg = curLeg(m), p = turnOf(m, leg);
@@ -435,6 +507,12 @@ function finishMatch(m) {
   doc.stats = matchStats(m); doc.date = Date.now();
   Store.put('matches', m.id, doc);
   m.done = true; saveLive();
+  // Best of 11 aus dem Trainingsplan: Ergebnis direkt dort eintragen
+  const p = S.plan;
+  if (m.planId && p && p.id === m.planId && p.steps[p.i] === 'bo11') {
+    const me = doc.stats.find(s => s.pid === p.pid), win = m.players[m.winner] === p.pid, avg = Math.round((me.avg || 0) * 10) / 10;
+    p.cur = [avg]; p.bo = null; planFinishGame(p, planGame('bo11'), bo11Pts(win, avg));
+  }
 }
 
 // ---------- Trainingsmodi (neue Modi hier ergänzen)
@@ -675,7 +753,7 @@ function vMatch(m) {
     if (isX) {
       const rem = remOf(m, leg, pi) - (act ? m.pending.reduce((a, d) => a + dartVal(d), 0) : 0);
       const co = act && m.out === 'double' ? checkout(rem, 3 - (m.input === 'dart' ? m.pending.length : 0)) : null;
-      return `<div class="pl ${act ? 'act' : ''}"><span class="nm">${esc(pname(pid))}</span><span class="rem">${rem}</span>
+      return `<div class="pl ${act ? 'act' : ''}"><span class="nm">${esc(pname(pid))}${pid === BOT ? ' · Ø ' + m.bot.avg : ''}</span><span class="rem">${rem}</span>
         <span class="sub"><span>Legs ${won[pi]}</span><span>Ø ${fmt(stats[pi].avg, 1)}</span><span>${stats[pi].darts} D</span></span><span class="co">${co ? co.map(dLabel).join(' · ') : ''}</span></div>`;
     }
     const mk = cst.marks[pi];
@@ -686,7 +764,10 @@ function vMatch(m) {
   const last = [...leg.visits].reverse()[0];
   const lastTxt = last ? `${esc(pname(m.players[last.p]))}: ${last.bust ? 'überworfen' : isX ? last.score : last.darts.map(dLabel).join(' ')}` : 'Leg ' + m.legs.length + ' · ' + esc(pname(m.players[leg.starter])) + ' beginnt';
   let pad;
-  if (m.input === 'dart' || !isX) {
+  if (m.players[cur] === BOT) {
+    pad = `<div class="darts">${[0, 1, 2].map(i => m.pending[i] ? `<span class="f">${dLabel(m.pending[i])}</span>` : '<span></span>').join('')}</div>
+      <div class="note" style="text-align:center">Bot wirft …</div><button class="btn block" data-act="undo">↶ Meinen letzten Wurf zurück</button>`;
+  } else if (m.input === 'dart' || !isX) {
     const nums = isX ? Array.from({ length: 20 }, (_, i) => i + 1) : [15, 16, 17, 18, 19, 20];
     pad = `<div class="darts">${[0, 1, 2].map(i => m.pending[i] ? `<span class="f">${dLabel(m.pending[i])}</span>` : '<span></span>').join('')}</div>
       <div class="pad"><div class="mods">${['S', 'D', 'T'].map(k => `<button class="${k.toLowerCase()} ${S.mod === k ? 'on' : ''}" data-act="mod" data-v="${k}">${{ S: 'Single', D: 'Double', T: 'Triple' }[k]}</button>`).join('')}</div>
@@ -710,7 +791,7 @@ function vMatchEnd(m) {
     <div class="tbl"><table><thead><tr><th>Spieler</th><th class="c">Legs</th>${isX ? '<th class="r">Ø</th><th class="r">First 9</th><th class="r">Checkout</th><th class="r">180</th><th class="r">100+</th><th class="r">High Finish</th><th class="r">Bestes Leg</th>' : '<th class="r">MPR</th><th class="r">Darts</th>'}</tr></thead><tbody>
     ${st.map((s, i) => `<tr class="${i === m.winner ? 'me' : ''}"><td>${esc(pname(s.pid))}</td><td class="c mono">${s.legsW}</td>${isX ? `<td class="n" style="color:var(--paper)">${fmt(s.avg, 1)}</td><td class="n">${fmt(s.f9, 1)}</td><td class="n">${s.att ? pct(s.hit, s.att) : '–'}</td><td class="n">${s.s180}</td><td class="n">${s.s100 + s.s140}</td><td class="n">${s.hi || '–'}</td><td class="n">${s.best ?? '–'}</td>` : `<td class="n">${fmt(s.mpr, 2)}</td><td class="n">${s.darts}</td>`}</tr>`).join('')}
     </tbody></table></div><p class="muted small" style="margin:0">Gespeichert. Die Werte fließen in die Statistik der Spieler ein.</p>
-    <div class="row"><button class="btn primary grow" data-act="rematch">Revanche</button><button class="btn grow" data-act="newGame">Neues Spiel</button></div>
+    ${m.planId && S.plan && S.plan.id === m.planId ? `<div class="note">Für den Trainingsplan zählt: ${S.plan.results.bo11 ? S.plan.results.bo11.pts + ' von 10 Punkten' : '–'}.</div><button class="btn primary block big" data-act="backToPlan">Weiter im Trainingsplan</button>` : `<div class="row"><button class="btn primary grow" data-act="rematch">Revanche</button><button class="btn grow" data-act="newGame">Neues Spiel</button></div>`}
     <button class="link" data-act="fixLast">Letzten Wurf korrigieren</button></section>`;
 }
 
@@ -741,11 +822,15 @@ function vPlan() {
   let big = '', btns = '';
   if (g.input === 'bo11') {
     const bo = p.bo || {};
+    const running = S.live && !S.live.done && S.live.planId === p.id;
     return `<section>${head}<h2>${esc(g.name)}</h2><p class="muted" style="margin:0">${esc(g.rule)}</p>
-      <p class="muted small" style="margin:0">Spiel das Best of 11 (z. B. gegen den Computer) und trag danach das Ergebnis ein.</p>
+      <h3>Gegen den Bot</h3><p class="muted small" style="margin:0">501 Double Out, wer zuerst 6 Legs hat. Der Bot wirft ungefähr deinen Average. Das Ergebnis wird automatisch eingetragen.</p>
+      ${running ? '' : botStrengthHtml(p.pid)}
+      <button class="btn primary block big" data-act="planBot">${running ? 'Zum laufenden Bot-Spiel' : 'Bot-Spiel starten'}</button>
+      <h3>Oder Ergebnis selbst eintragen</h3>
       <div class="seg"><button class="${bo.win === true ? 'on' : ''}" data-act="planBo" data-v="1">Gewonnen</button><button class="${bo.win === false ? 'on' : ''}" data-act="planBo" data-v="0">Verloren</button></div>
       <label class="f">Dein Average<input type="text" id="boavg" inputmode="decimal" placeholder="z. B. 72,4" value="${bo.avg ?? ''}"></label>
-      <button class="btn primary block big" data-act="planBoSave">Speichern</button><button class="link" data-act="planSkip">Spiel überspringen</button></section>`;
+      <button class="btn block" data-act="planBoSave">Speichern</button><button class="link" data-act="planSkip">Spiel überspringen</button></section>`;
   }
   if (g.input === 'visit') {
     big = fmt(n ? sum / n : null, 1);
@@ -808,6 +893,10 @@ function vTraining() {
       <div class="row"><button class="btn primary grow big" data-act="planStart" data-v="voll" ${S.trPid ? '' : 'disabled'}>Komplett · ca. 2 h</button><button class="btn grow big" data-act="planStart" data-v="kurz" ${S.trPid ? '' : 'disabled'}>Kurz · ca. 25 min</button></div>
       <p class="muted small" style="margin:0">Komplett: Warm-Up und alle 10 Spiele. Kurz: 3 Minuten Warm-Up, dann ${esc(kurzNames)} mit weniger Runden. Beide fließen in dieselbe Statistik.</p>
       ${S.trPid ? planTable(S.trPid) : ''}</section>
+    ${S.trPid ? `<section><h3>Gegen den Bot</h3><p class="muted small" style="margin:0">501 Double Out. Der Bot wirft ungefähr deinen Average, mit − und + machst du ihn schwächer oder stärker.</p>
+      ${botStrengthHtml(S.trPid)}
+      <div class="seg">${[[3, 'Best of 5'], [6, 'Best of 11']].map(([n, l]) => `<button class="${S.botLegs === n ? 'on' : ''}" data-act="botLegs" data-v="${n}">${l}</button>`).join('')}</div>
+      <button class="btn block" data-act="botStart">Bot-Spiel starten</button></section>` : ''}
     <section><h3>Einzelne Übungen</h3><div class="list">${Object.entries(TR).map(([k, d]) => `<button class="li ${k === S.trSel ? 'sel' : ''}" data-act="trSel" data-v="${k}"><span class="grow two"><span>${esc(d.name)}</span><br><span class="muted small">${esc(d.desc)}</span></span></button>`).join('')}</div>
       ${def.variants ? `<div class="seg">${def.variants.map(([k, l]) => `<button class="${S.trVar === k ? 'on' : ''}" data-act="trVar" data-v="${k}">${l}</button>`).join('')}</div>` : ''}
       <button class="btn block" data-act="trStart" ${S.trPid ? '' : 'disabled'}>${esc(def.name)} starten</button></section>`;
@@ -887,12 +976,21 @@ function render() {
   $('#app').innerHTML = views[S.tab]();
   $('#stamp').innerHTML = L ? 'Liga-Stand<br>' + esc(new Date(L.aktualisiert).toLocaleString('de-AT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })) : '';
   $('#refreshBtn').classList.toggle('spin', S.refreshing);
+  // Bot ist dran: ein Dart nach dem anderen, damit man mitlesen kann
+  if (!botT && S.tab === 'spielen' && isBotTurn(S.live) && !S.abortAsk) botT = setTimeout(botTick, S.live.pending.length ? 650 : 900);
 }
 function softRender() {
   const a = document.activeElement;
   if (a && (a.tagName === 'INPUT' || a.tagName === 'SELECT')) return;
   if ((S.tab === 'spielen' && S.live && !S.live.done) || (S.tab === 'training' && ((S.tr && !S.tr.done) || (S.plan && S.plan.i < S.plan.steps.length)))) return;
   render();
+}
+function startBot(pid, legs, planId) {
+  if (!pid) return;
+  if (S.live && !S.live.done) { S.tab = 'spielen'; return toast('Erst das laufende Spiel beenden.') }
+  S.live = newMatch({ type: 'x01', start: 501, legs, out: 'double', input: S.setup.input || 'dart', players: [pid, BOT], bot: { avg: botAvg(pid) }, planId });
+  S.mod = 'S'; S.entry = ''; S.abortAsk = false; S.ask = null; saveLive();
+  S.tab = 'spielen'; LS.set('darts.tab', 'spielen'); window.scrollTo(0, 0);
 }
 const A = {
   tab: d => { S.tab = d.t; if (d.t !== 'settings') LS.set('darts.tab', S.tab); S.report = null; S.lplayer = null; S.statMatch = null; window.scrollTo(0, 0) },
@@ -916,13 +1014,19 @@ const A = {
   input: d => { S.setup.input = d.v; LS.set('darts.setup', S.setup) },
   startMatch: () => { S.setup.players = S.setup.players.filter(id => Store.data.profiles[id]); if (!S.setup.players.length) return; S.live = newMatch(S.setup); S.mod = 'S'; S.entry = ''; S.abortAsk = false; saveLive(); window.scrollTo(0, 0) },
   mod: d => S.mod = S.mod === d.v && d.v !== 'S' ? 'S' : d.v,
-  dart: d => { const m = S.live, n = +d.v; if (n === 25 && S.mod === 'T') return; (m.type === 'x01' ? x01Dart : crDart)(m, n === 0 ? 'M' : S.mod + n); S.mod = 'S' },
-  undo: () => { undoMatch(S.live); S.entry = '' },
+  dart: d => { const m = S.live, n = +d.v; if (isBotTurn(m)) return; if (n === 25 && S.mod === 'T') return; (m.type === 'x01' ? x01Dart : crDart)(m, n === 0 ? 'M' : S.mod + n); S.mod = 'S' },
+  undo: () => { const m = S.live; clearTimeout(botT); botT = null; m.bot ? undoWithBot(m) : undoMatch(m); S.entry = ''; saveLive() },
+  botAdj: d => { S.botOff = (S.botOff || 0) + +d.v; LS.set('darts.botoff', S.botOff) },
+  botLegs: d => S.botLegs = +d.v,
+  botStart: () => startBot(S.trPid, S.botLegs, null),
+  planBot: () => { const p = S.plan; if (S.live && !S.live.done && S.live.planId === p.id) { S.tab = 'spielen'; return } startBot(p.pid, 6, p.id) },
+  backToPlan: () => { S.live = null; LS.del('darts.live'); S.tab = 'training'; LS.set('darts.tab', 'training'); window.scrollTo(0, 0) },
   toggleInput: () => { const m = S.live; if (m.pending.length) return toast('Erst die laufende Aufnahme beenden.'); m.input = m.input === 'dart' ? 'visit' : 'dart'; S.entry = ''; saveLive(); toast(m.input === 'dart' ? 'Eingabe pro Dart' : 'Eingabe pro Aufnahme') },
   key: d => { if (d.v === 'del') S.entry = S.entry.slice(0, -1); else if (S.entry.length < 3) S.entry = (S.entry + d.v).replace(/^0+(?=\d)/, '') },
   quick: d => { S.entry = d.v; A.visitOk() },
   visitOk: () => {
     const m = S.live, v = +S.entry || 0; S.entry = '';
+    if (isBotTurn(m)) return;
     if (v > 180 || BAD_VISIT.includes(v)) return toast(v + ' ist mit 3 Darts nicht möglich.');
     const leg = curLeg(m), rem = remOf(m, leg, turnOf(m, leg));
     if (v === rem) {
@@ -936,10 +1040,10 @@ const A = {
   coDarts: d => { const v = S.ask.score; S.ask = null; x01Visit(S.live, v, +d.v) },
   coCancel: () => S.ask = null,
   abort: () => S.abortAsk = true, abortNo: () => S.abortAsk = false,
-  abortYes: () => { S.live = null; S.abortAsk = false; LS.del('darts.live') },
-  rematch: () => { const m = S.live; S.live = newMatch({ type: m.type, start: m.start, legs: m.legsToWin, out: m.out, input: m.input, players: [...m.players.slice(1), m.players[0]] }); saveLive() },
+  abortYes: () => { const fromPlan = S.live && S.live.planId; S.live = null; S.abortAsk = false; LS.del('darts.live'); if (fromPlan && S.plan) S.tab = 'training' },
+  rematch: () => { const m = S.live; S.live = newMatch({ type: m.type, start: m.start, legs: m.legsToWin, out: m.out, input: m.input, players: [...m.players.slice(1), m.players[0]], bot: m.bot }); saveLive() },
   newGame: () => { S.live = null; LS.del('darts.live') },
-  fixLast: () => { const m = S.live; Store.del('matches', m.id); delete m.done; delete m.stats; m.winner = null; m.finishedAt = null; undoMatch(m) },
+  fixLast: () => { const m = S.live; Store.del('matches', m.id); delete m.done; delete m.stats; m.winner = null; m.finishedAt = null; m.bot ? undoWithBot(m) : undoMatch(m); saveLive() },
   trSel: d => { S.trSel = d.v; S.trVar = null }, trVar: d => S.trVar = d.v, trPid: d => S.trPid = d.v,
   trStart: () => { const def = TR[S.trSel]; S.tr = { id: uid(), mode: S.trSel, variant: def.variants ? S.trVar : null, pid: S.trPid, st: def.init(), log: [] }; S.entry = ''; saveTr(); window.scrollTo(0, 0) },
   trIn: d => trInput(S.tr, d.v),
@@ -983,6 +1087,9 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
   const f = A[b.dataset.act]; if (!f) return;
   f(b.dataset, b, e); render();
+  // Kurzes Aufleuchten am gedrückten Knopf (nach dem Neuzeichnen am gleichen Knopf)
+  const sel = `[data-act="${b.dataset.act}"]` + (b.dataset.v != null ? `[data-v="${CSS.escape(b.dataset.v)}"]` : '');
+  const nb = $('#app').querySelector(sel); if (nb) { nb.classList.remove('flash'); void nb.offsetWidth; nb.classList.add('flash') }
 });
 document.addEventListener('change', e => {
   const el = e.target;
@@ -1016,6 +1123,19 @@ let lastSync = 0;
 const syncSoon = () => { if (document.visibilityState === 'visible' && Date.now() - lastSync > 15000) { lastSync = Date.now(); Store.sync() } };
 window.addEventListener('focus', syncSoon);
 setInterval(syncSoon, 60000);
+// Ganz oben nach unten ziehen = wie der Pfeil oben rechts (Liga neu holen + Geräte abgleichen)
+(() => {
+  const el = $('#ptr'), MAX = 90, GO = 70; let y0 = null, dy = 0;
+  const set = (d, cls) => { el.style.transform = `translateY(${d - 48}px) rotate(${d * 3}deg)`; el.style.opacity = Math.min(1, d / GO); el.classList.toggle('ready', d >= GO) };
+  document.addEventListener('touchstart', e => { y0 = window.scrollY <= 0 && e.touches.length === 1 ? e.touches[0].clientY : null; dy = 0; el.classList.remove('go') }, { passive: true });
+  document.addEventListener('touchmove', e => { if (y0 == null) return; dy = Math.min(MAX, Math.max(0, (e.touches[0].clientY - y0) * .5)); if (window.scrollY > 0) { y0 = null; dy = 0 } set(dy) }, { passive: true });
+  document.addEventListener('touchend', () => {
+    if (y0 == null) return; y0 = null; el.classList.add('go');
+    if (dy >= GO) { set(GO); el.classList.add('spin'); A.refreshLiga(); render(); const wait = setInterval(() => { if (!S.refreshing) { clearInterval(wait); el.classList.remove('spin'); set(0) } }, 300) }
+    else set(0);
+    dy = 0;
+  });
+})();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 Store.init();
 render();
