@@ -543,7 +543,7 @@ function finishMatch(m) {
   const p = S.plan;
   if (m.planId && p && p.id === m.planId && p.steps[p.i] === 'bo11') {
     const me = doc.stats.find(s => s.pid === p.pid), win = m.players[m.winner] === p.pid, avg = Math.round((me.avg || 0) * 10) / 10;
-    p.cur = [avg]; p.bo = null; planFinishGame(p, planGame('bo11'), bo11Pts(win, avg));
+    p.cur = [avg]; p.bo = null; planGoals(p); planFinishGame(p, planGame('bo11'), bo11Pts(win, avg, goalOf(p, 'power')));
   }
 }
 
@@ -582,7 +582,7 @@ function trInput(t, x) {
     if (st.i > 20) return trFinish(t, st.score, { bis: 21 });
   }
   if (t.mode === 'c121') { st.n++; if (x === 'hit') { st.succ++; st.target = Math.min(170, st.target + 1); st.best = Math.max(st.best, st.target) } if (st.n >= 10) return trFinish(t, st.succ, { hoechstesZiel: st.best }) }
-  if (t.mode === 'scoring') { st.visits.push(+x); if (st.visits.length >= +t.variant) { const avg = st.visits.reduce((a, b) => a + b, 0) / st.visits.length; return trFinish(t, avg, { aufnahmen: st.visits.length }) } }
+  if (t.mode === 'scoring') { st.visits.push(+x); if (st.visits.length >= +t.variant) { const avg = st.visits.reduce((a, b) => a + b, 0) / st.visits.length; return trFinish(t, avg, { aufnahmen: st.visits.length, ziel: powerGoal(t.pid) }) } }
   if (t.mode === 'dbl') { st.darts++; if (x === 'hit') { st.hits++; st.i++ } if (st.darts >= 30) return trFinish(t, st.hits / st.darts * 100, { treffer: st.hits }) }
   if (t.mode === 'treble') { const n = +t.variant; st.darts++; if (x === 'T') { st.T++; st.pts += 3 * n } else if (x === 'D') { st.D++; st.pts += 2 * n } else if (x === 'S') { st.S++; st.pts += n } if (st.darts >= 30) return trFinish(t, st.pts, { triple: st.T }) }
   saveTr();
@@ -612,8 +612,25 @@ const PLAN = [
 const planGame = id => PLAN.find(g => g.id === id);
 const planRounds = (g, v) => v === 'kurz' ? g.short : g.rounds;
 const savePlan = () => LS.set('darts.plan', S.plan);
-// Persönliche Average-Stufen (Original-Plan: 70/75/80/85 → 1/2/3/5)
-const bo11Pts = (win, avg) => (win ? 5 : 0) + (avg >= 67 ? 5 : avg >= 62 ? 4 : avg >= 57 ? 3 : avg >= 52 ? 2 : 0);
+// Scoring-Ziel wächst mit: pro Spieler gespeichert (Start 67, Original-Plan 90).
+// Jede Session merkt sich das Ziel von damals, damit der Verlauf nicht rückwirkend schlechter aussieht.
+const POWER_START = 67;
+const powerGoal = pid => (Store.data.profiles[pid] || {}).powerGoal || POWER_START;
+const curGoal = (k, pid) => k === 'power' ? powerGoal(pid) : planGame(k).goal;
+const goalOf = (s, k) => k === 'power' ? (s.goals && s.goals.power) || POWER_START : planGame(k).goal;
+const planGoals = p => p.goals || (p.goals = { power: powerGoal(p.pid) });
+// Anheben: Schnitt der letzten 5 Power-Scoring-Ergebnisse seit der letzten Anhebung ≥ Ziel und mindestens 3 davon ≥ Ziel → +3
+function checkPowerGoal(pid) {
+  const pr = Store.data.profiles[pid]; if (!pr) return null;
+  const G = powerGoal(pid), ss = planSessions(pid).filter(s => s.date > (pr.powerGoalSince || 0) && s.results.power).slice(-5), l = ss.map(s => s.results.power.fe);
+  if (l.length < 5 || l.reduce((a, b) => a + b, 0) / 5 < G || l.filter(v => v >= G).length < 3) return null;
+  // "seit" = Start der auslösenden Session, damit danach wieder 5 neue Sessions nötig sind
+  Store.put('profiles', pid, { ...clone(pr), powerGoal: G + 3, powerGoalSince: ss[4].date });
+  return G + 3;
+}
+// Best-of-11-Average-Stufen hängen am Scoring-Ziel: Ziel −15/−10/−5/±0 → 2/3/4/5 Punkte (bei Ziel 67: 52/57/62/67)
+const bo11Pts = (win, avg, pg = POWER_START) => (win ? 5 : 0) + (avg >= pg ? 5 : avg >= pg - 5 ? 4 : avg >= pg - 10 ? 3 : avg >= pg - 15 ? 2 : 0);
+const bo11Rule = pg => `Sieg = 5 Punkte. Dazu für den Average: ab ${pg - 15} = 2, ab ${pg - 10} = 3, ab ${pg - 5} = 4, ab ${pg} = 5 Punkte.`;
 const feFmt = v => v == null ? '–' : fmt(v, v % 1 ? 1 : 0);
 function planInput(p, val) {
   const g = planGame(p.steps[p.i]); p.cur.push(val);
@@ -626,6 +643,7 @@ function planFinishGame(p, g, pts) {
   p.results[g.id] = { pts, played: n, fe: Math.round(fe * 10) / 10 };
   p.cur = []; planStep(p);
   toast(`${g.name}: ${pts} Punkte`);
+  if (g.id === 'power') { const ng = checkPowerGoal(p.pid); if (ng) { p.raised = ng; savePlan(); toast(`Neues Scoring-Ziel: ${ng}. Gilt ab dem nächsten Training.`) } }
 }
 // Nächste Einheit; nach der letzten stoppt die Stoppuhr (Start inkl. Warm-Up bis Ende der letzten Einheit)
 function planStep(p) {
@@ -634,29 +652,30 @@ function planStep(p) {
 }
 function planSaveDoc(p) {
   const ids = Object.keys(p.results); if (!ids.length) return;
-  const punkte = ids.reduce((a, k) => a + p.results[k].fe, 0), ziel = ids.reduce((a, k) => a + planGame(k).goal, 0);
-  Store.put('trainings', p.id, { mode: 'plan', variant: p.variant, pid: p.pid, date: p.date, results: clone(p.results), punkte, ziel, metric: ziel ? punkte / ziel * 100 : 0, ...(p.end ? { dauer: p.end - p.date } : {}) });
+  planGoals(p);
+  const punkte = ids.reduce((a, k) => a + p.results[k].fe, 0), ziel = ids.reduce((a, k) => a + goalOf(p, k), 0);
+  Store.put('trainings', p.id, { mode: 'plan', variant: p.variant, pid: p.pid, date: p.date, results: clone(p.results), goals: clone(p.goals), punkte, ziel, metric: ziel ? punkte / ziel * 100 : 0, ...(p.end ? { dauer: p.end - p.date } : {}) });
 }
 const durFmt = ms => { if (ms == null) return '–'; const m = Math.round(ms / 60000); return m < 60 ? m + ' min' : Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0') + ' h' };
 // Ø Dauer pro Variante aus den gestoppten Sessions (null, solange keine gestoppt ist)
 const planAvgDur = (pid, variant) => { const d = planSessions(pid).filter(s => s.variant === variant && s.dauer).map(s => s.dauer); return d.length ? { ms: d.reduce((a, b) => a + b, 0) / d.length, n: d.length } : null };
-// Zielerreichung immer mit den aktuellen Zielen rechnen, damit geänderte Ziele auch alte Sessions neu bewerten
-const planPct = s => { const ids = Object.keys(s.results).filter(planGame), z = ids.reduce((a, k) => a + planGame(k).goal, 0); return z ? ids.reduce((a, k) => a + s.results[k].fe, 0) / z * 100 : 0 };
+// Zielerreichung neu rechnen (Ziele aus dem Plan aktuell, Scoring-Ziel wie damals gespeichert)
+const planPct = s => { const ids = Object.keys(s.results).filter(planGame), z = ids.reduce((a, k) => a + goalOf(s, k), 0); return z ? ids.reduce((a, k) => a + s.results[k].fe, 0) / z * 100 : 0 };
 const planSessions = pid => Store.list('trainings').filter(t => t.mode === 'plan' && t.pid === pid && t.results).sort((a, b) => a.date - b.date);
 function planTable(pid) {
   const ss = planSessions(pid).slice(-4);
   if (!ss.length) return '<p class="muted small" style="margin:0">Noch keine Session gespeichert. Nach jedem Spiel wird automatisch gesichert.</p>';
   return `<div class="tbl"><table><thead><tr><th>Spiel</th><th class="r">Ziel</th>${ss.map(s => `<th class="r">${dShort(s.date)}${s.variant === 'kurz' ? ' K' : ''}</th>`).join('')}</tr></thead><tbody>
-    ${PLAN.map(g => `<tr><td>${esc(g.name)}</td><td class="n">${g.goal}</td>${ss.map(s => { const r = s.results[g.id]; return `<td class="n ${r && r.fe >= g.goal ? 'good' : ''}">${r ? feFmt(r.fe) : ''}</td>` }).join('')}</tr>`).join('')}
+    ${PLAN.map(g => `<tr><td>${esc(g.name)}</td><td class="n">${curGoal(g.id, pid)}</td>${ss.map(s => { const r = s.results[g.id]; return `<td class="n ${r && r.fe >= goalOf(s, g.id) ? 'good' : ''}">${r ? feFmt(r.fe) : ''}</td>` }).join('')}</tr>`).join('')}
     <tr><td><b>Ziel erreicht</b></td><td class="n">100 %</td>${ss.map(s => `<td class="n" style="color:var(--paper)">${fmt(planPct(s), 0)} %</td>`).join('')}</tr>
     <tr><td>Dauer</td><td></td>${ss.map(s => `<td class="n">${durFmt(s.dauer)}</td>`).join('')}</tr>
   </tbody></table></div><p class="muted small" style="margin:0">K = Kurzplan, hochgerechnet auf die volle Rundenzahl. Blau = Ziel erreicht.</p>`;
 }
 function planCharts(pid) {
   const ss = planSessions(pid); if (!ss.length) return '';
-  const per = PLAN.map(g => ({ g, pts: ss.filter(s => s.results[g.id]).map(s => ({ x: dShort(s.date), y: s.results[g.id].fe })) })).filter(x => x.pts.length);
+  const per = PLAN.map(g => ({ g, pts: ss.filter(s => s.results[g.id]).map(s => ({ x: dShort(s.date), y: s.results[g.id].fe, goal: goalOf(s, g.id) })) })).filter(x => x.pts.length);
   return `<div class="card"><div class="bar"><span>Zielerreichung</span><span class="cap">${ss.length} Sessions</span></div>${chart(ss.map(s => ({ x: dShort(s.date), y: planPct(s) })), { h: 150, label: 'Zielerreichung Trainingsplan', fy: v => fmt(v, 0) + '%', goal: 100 })}</div>
-    ${per.map(({ g, pts }) => `<div class="card"><div class="bar"><span>${esc(g.name)}</span><span class="cap">Ziel ${g.goal} · zuletzt ${feFmt(pts[pts.length - 1].y)} · Best ${feFmt(Math.max(...pts.map(p => p.y)))}</span></div>${chart(pts, { h: 120, label: g.name, fy: v => fmt(v, 0), goal: g.goal })}</div>`).join('')}`;
+    ${per.map(({ g, pts }) => `<div class="card"><div class="bar"><span>${esc(g.name)}</span><span class="cap">Ziel ${curGoal(g.id, pid)} · zuletzt ${feFmt(pts[pts.length - 1].y)} · Best ${feFmt(Math.max(...pts.map(p => p.y)))}</span></div>${chart(pts, { h: 120, label: g.name, fy: v => fmt(v, 0), goal: pts.map(p => p.goal) })}</div>`).join('')}`;
 }
 setInterval(() => { const el = document.getElementById('warmclock'); if (el && S.plan && S.plan.warmEnd) { const s = Math.max(0, Math.round((S.plan.warmEnd - Date.now()) / 1000)); el.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); if (!s) el.style.color = 'var(--ice)' } }, 1000);
 
@@ -664,15 +683,20 @@ setInterval(() => { const el = document.getElementById('warmclock'); if (el && S
 function chart(pts, { h = 170, fy = v => fmt(v, 1), label = 'Verlauf', goal = null } = {}) {
   if (pts.length < 2) return '<p class="muted small" style="margin:0">Ab zwei Einträgen erscheint hier der Verlauf.</p>';
   const W = 600, H = h, pl = 44, pr = 16, pt = 16, pb = 26;
-  const ys = pts.map(p => p.y).concat(goal != null ? [goal] : []); let lo = Math.min(...ys), hi = Math.max(...ys);
+  // goal: eine Zahl oder pro Punkt eine (Ziel, das mitwächst → Stufenlinie)
+  const gs = goal == null ? null : Array.isArray(goal) ? goal : pts.map(() => goal);
+  const ys = pts.map(p => p.y).concat(gs || []); let lo = Math.min(...ys), hi = Math.max(...ys);
   const raw = (hi - lo) / 3 || Math.max(1, Math.abs(hi) * .1);
   const mag = Math.pow(10, Math.floor(Math.log10(raw))); const step = [1, 2, 2.5, 5, 10].map(x => x * mag).find(x => x >= raw);
   lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step; if (hi === lo) hi = lo + step;
   const X = i => pl + i * (W - pl - pr) / (pts.length - 1), Y = v => pt + (hi - v) / (hi - lo) * (H - pt - pb);
   let g = '';
   // "Ziel" steht links in der Achsenspalte; Achsenwerte zu nah daran fallen weg
-  for (let v = lo; v <= hi + 1e-9; v += step) g += `<line class="grid" x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}"/>${goal != null && Math.abs(Y(v) - Y(goal)) < 12 ? '' : `<text class="ax" x="${pl - 6}" y="${Y(v) + 4}" text-anchor="end">${esc(fy(v))}</text>`}`;
-  if (goal != null) g += `<line class="goal" x1="${pl}" x2="${W - pr}" y1="${Y(goal)}" y2="${Y(goal)}"/><text class="ax" x="${pl - 6}" y="${Y(goal) + 4}" text-anchor="end">Ziel</text>`;
+  for (let v = lo; v <= hi + 1e-9; v += step) g += `<line class="grid" x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}"/>${gs && Math.abs(Y(v) - Y(gs[0])) < 12 ? '' : `<text class="ax" x="${pl - 6}" y="${Y(v) + 4}" text-anchor="end">${esc(fy(v))}</text>`}`;
+  if (gs) {
+    let d = `M${pl},${Y(gs[0])}`; for (let i = 1; i < gs.length; i++) if (gs[i] !== gs[i - 1]) { const x = (X(i - 1) + X(i)) / 2; d += `H${x}V${Y(gs[i])}` }
+    g += `<path class="goal" fill="none" d="${d}H${W - pr}"/><text class="ax" x="${pl - 6}" y="${Y(gs[0]) + 4}" text-anchor="end">Ziel</text>`;
+  }
   const line = pts.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(p.y).toFixed(1)}`).join('');
   const area = `${line}L${X(pts.length - 1)},${Y(lo)}L${X(0)},${Y(lo)}Z`;
   const last = pts[pts.length - 1], lx = X(pts.length - 1), ly = Y(last.y);
@@ -691,11 +715,11 @@ const RADAR = [
 ];
 function radarData(pid) {
   const s = {}; const add = (k, date, pct) => (s[k] = s[k] || []).push({ date, pct });
-  planSessions(pid).forEach(x => Object.entries(x.results).forEach(([k, r]) => add(k === 'switch' ? 'treble' : k, x.date, r.fe / planGame(k).goal * 100)));
+  planSessions(pid).forEach(x => Object.entries(x.results).forEach(([k, r]) => add(k === 'switch' ? 'treble' : k, x.date, r.fe / goalOf(x, k) * 100)));
   Store.list('trainings').filter(t => t.pid === pid).forEach(t => {
     if (t.mode === 'dbl') add('dbl', t.date, t.metric / 33 * 100);              // Ziel: jedes dritte Doppel
     if (t.mode === 'treble' && t.extra) add('treble', t.date, t.extra.triple / 7.5 * 100); // Ziel: 25 % Triple
-    if (t.mode === 'scoring') add('power', t.date, t.metric / planGame('power').goal * 100);
+    if (t.mode === 'scoring') add('power', t.date, t.metric / ((t.extra && t.extra.ziel) || POWER_START) * 100);
   });
   Store.list('matches').filter(m => m.type === 'x01' && m.stats && m.players.includes(pid)).forEach(m => { const st = m.stats.find(x => x.pid === pid); if (st && st.att) add('comatch', m.date, st.hit / st.att / .33 * 100) });
   return RADAR.filter(([k]) => s[k]).map(([k, name]) => {
@@ -901,14 +925,15 @@ function vMatchEnd(m) {
 
 // ---------- Ansichten: Training
 function vPlan() {
-  const p = S.plan, kurz = p.variant === 'kurz';
+  const p = S.plan, kurz = p.variant === 'kurz'; planGoals(p);
   const head = `<div class="bar"><span class="cap">Trainingsplan ${kurz ? 'kurz' : 'komplett'} · ${esc(pname(p.pid))} · ${Math.min(p.i + 1, p.steps.length)}/${p.steps.length} · ⏱ ${durFmt(Date.now() - p.date)}</span><button class="chip" data-act="planAbort">Beenden</button></div>
     ${S.planAbortAsk ? `<div class="note warn row"><span class="grow">Training beenden? Fertige Spiele bleiben gespeichert.</span><button class="btn danger" data-act="planAbortYes">Beenden</button><button class="btn" data-act="planAbortNo">Weiter</button></div>` : ''}`;
   if (p.i >= p.steps.length) {
-    const ids = Object.keys(p.results), punkte = ids.reduce((a, k) => a + p.results[k].fe, 0), ziel = ids.reduce((a, k) => a + planGame(k).goal, 0);
+    const ids = Object.keys(p.results), punkte = ids.reduce((a, k) => a + p.results[k].fe, 0), ziel = ids.reduce((a, k) => a + goalOf(p, k), 0);
     return `<section><span class="cap">Trainingsplan ${kurz ? 'kurz' : 'komplett'} · ${esc(pname(p.pid))} · Dauer ${durFmt(p.end ? p.end - p.date : null)}</span><h2>${fmt(ziel ? punkte / ziel * 100 : 0, 0)} % vom Ziel</h2>
+      ${p.raised ? `<div class="note">Stark! Dein Scoring-Ziel steigt auf <b>${p.raised}</b>. Die Best-of-11-Stufen ziehen mit (${p.raised - 15}/${p.raised - 10}/${p.raised - 5}/${p.raised}).</div>` : ''}
       <div class="tbl"><table><thead><tr><th>Spiel</th><th class="r">Punkte</th><th class="r">Hochgerechnet</th><th class="r">Ziel</th></tr></thead><tbody>
-      ${ids.map(k => { const g = planGame(k), r = p.results[k]; return `<tr><td>${esc(g.name)}</td><td class="n">${r.pts}${g.input === 'visit' || g.input === 'bo11' ? '' : ' / ' + r.played}</td><td class="n ${r.fe >= g.goal ? 'good' : ''}">${feFmt(r.fe)}</td><td class="n">${g.goal}</td></tr>` }).join('')}
+      ${ids.map(k => { const g = planGame(k), r = p.results[k]; return `<tr><td>${esc(g.name)}</td><td class="n">${r.pts}${g.input === 'visit' || g.input === 'bo11' ? '' : ' / ' + r.played}</td><td class="n ${r.fe >= goalOf(p, k) ? 'good' : ''}">${feFmt(r.fe)}</td><td class="n">${goalOf(p, k)}</td></tr>` }).join('')}
       <tr><td><b>Summe</b></td><td></td><td class="n" style="color:var(--paper)">${feFmt(Math.round(punkte * 10) / 10)}</td><td class="n">${ziel}</td></tr></tbody></table></div>
       <p class="muted small" style="margin:0">Gespeichert. Die Entwicklung siehst du unter Statistik.</p>
       <button class="btn primary block" data-act="planClose">Fertig</button></section>`;
@@ -922,12 +947,12 @@ function vPlan() {
   }
   const g = planGame(step), N = planRounds(g, p.variant), n = p.cur.length;
   const sum = p.cur.reduce((a, b) => a + b, 0);
-  const goalNow = g.input === 'visit' || g.input === 'bo11' ? g.goal : Math.round(g.goal * N / g.rounds * 10) / 10;
+  const gl = goalOf(p, g.id), goalNow = g.input === 'visit' || g.input === 'bo11' ? gl : Math.round(gl * N / g.rounds * 10) / 10;
   let big = '', btns = '';
   if (g.input === 'bo11') {
     const bo = p.bo || {};
     const running = S.live && !S.live.done && S.live.planId === p.id;
-    return `<section>${head}<h2>${esc(g.name)}</h2><p class="muted" style="margin:0">${esc(g.rule)}</p>
+    return `<section>${head}<h2>${esc(g.name)}</h2><p class="muted" style="margin:0">${esc(bo11Rule(goalOf(p, 'power')))}</p>
       <h3>Gegen den Bot</h3><p class="muted small" style="margin:0">501 Double Out, wer zuerst 6 Legs hat. Der Bot wirft ungefähr deinen Average. Das Ergebnis wird automatisch eingetragen.</p>
       ${running ? '' : botStrengthHtml(p.pid)}
       <button class="btn primary block big" data-act="planBot">${running ? 'Zum laufenden Bot-Spiel' : 'Bot-Spiel starten'}</button>
@@ -939,7 +964,7 @@ function vPlan() {
   if (g.input === 'visit') {
     big = fmt(n ? sum / n : null, 1);
     return `<section>${head}<h2>${esc(g.name)}</h2><p class="muted" style="margin:0">${esc(g.rule)}</p>
-      <div class="tbig">${big}</div><p class="cap" style="text-align:center;margin:0">Ø nach ${n} von ${N} Aufnahmen · Ziel ${g.goal}${n ? ' · zuletzt ' + p.cur[n - 1] : ''}</p>
+      <div class="tbig">${big}</div><p class="cap" style="text-align:center;margin:0">Ø nach ${n} von ${N} Aufnahmen · Ziel ${gl}${n ? ' · zuletzt ' + p.cur[n - 1] : ''}</p>
       <div class="entry">${S.entry || '<span class="muted">0</span>'}</div>
       <div class="quick">${[26, 41, 45, 60, 81, 85, 95, 100, 140, 180].map(v => `<button data-act="planQuick" data-v="${v}">${v}</button>`).join('')}</div>
       <div class="pad np">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(k => `<button data-act="key" data-v="${k}">${k}</button>`).join('')}<button class="act" data-act="key" data-v="del">⌫</button><button data-act="key" data-v="0">0</button><button class="ok" data-act="planOk">OK</button></div>
@@ -1048,6 +1073,8 @@ function vStats() {
 function vManage(pr, pid) {
   const opts = L ? L.players.slice().sort((a, b) => (a.team === S.team) !== (b.team === S.team) ? (a.team === S.team ? -1 : 1) : a.name.localeCompare(b.name, 'de')) : [];
   return `<div class="card" style="display:flex;flex-direction:column;gap:12px"><label class="f">Name<div class="row"><input type="text" id="rename" class="grow" value="${esc(pr.name)}" maxlength="30"><button class="btn" data-act="rename" data-v="${pid}">Speichern</button></div></label>
+    <label class="f">Scoring-Ziel (Power-Scoring)<div class="row"><input type="text" id="pgoal" class="grow" inputmode="numeric" value="${powerGoal(pid)}" maxlength="3"><button class="btn" data-act="setGoal" data-v="${pid}">Speichern</button></div></label>
+    <p class="muted small" style="margin:-6px 0 0">Steigt automatisch um 3, wenn der Schnitt deiner letzten 5 Power-Scoring-Ergebnisse das Ziel erreicht und mindestens 3 davon drüber liegen. Die Best-of-11-Stufen ziehen mit.</p>
     <label class="f">Mit WDV-Spieler verknüpfen<select id="wdvlink" data-chg="wdvlink" data-v="${pid}"><option value="">– keiner –</option>${opts.map(p => `<option value="${esc(p.name)}" ${pr.wdv === p.name ? 'selected' : ''}>${esc(p.name)} (${esc(p.team)})</option>`).join('')}</select></label>
     ${S.delAsk === pid ? `<div class="note warn row"><span class="grow">${esc(pr.name)} löschen? Gespeicherte Spiele bleiben erhalten.</span><button class="btn danger" data-act="delYes" data-v="${pid}">Löschen</button><button class="btn" data-act="delNo">Behalten</button></div>` : `<button class="btn danger" data-act="delAsk" data-v="${pid}">Spieler löschen</button>`}</div>`;
 }
@@ -1160,7 +1187,7 @@ const A = {
   trAbort: () => { S.tr = null; LS.del('darts.trlive') },
   trAgain: () => { const t = S.tr; S.tr = { id: uid(), mode: t.mode, variant: t.variant, pid: t.pid, st: TR[t.mode].init(), log: [] }; saveTr() },
   trClose: () => { S.tr = null; LS.del('darts.trlive') },
-  planStart: d => { if (!S.trPid) return; S.plan = { id: uid(), variant: d.v, pid: S.trPid, date: Date.now(), steps: ['warm', ...PLAN.filter(g => d.v === 'voll' || g.short).map(g => g.id)], i: 0, cur: [], results: {}, warmEnd: null }; S.entry = ''; S.planAbortAsk = false; savePlan(); window.scrollTo(0, 0) },
+  planStart: d => { if (!S.trPid) return; S.plan = { id: uid(), variant: d.v, pid: S.trPid, date: Date.now(), steps: ['warm', ...PLAN.filter(g => d.v === 'voll' || g.short).map(g => g.id)], i: 0, cur: [], results: {}, warmEnd: null, goals: { power: powerGoal(S.trPid) } }; S.entry = ''; S.planAbortAsk = false; savePlan(); window.scrollTo(0, 0) },
   planWarm: d => { S.plan.warmEnd = Date.now() + d.v * 60000; savePlan() },
   planNext: () => { S.plan.cur = []; planStep(S.plan); window.scrollTo(0, 0) },
   planIn: d => planInput(S.plan, +d.v),
@@ -1169,7 +1196,7 @@ const A = {
   planUndo: () => { S.plan.cur.pop(); savePlan() },
   planSkip: () => { S.plan.cur = []; S.plan.bo = null; planStep(S.plan); window.scrollTo(0, 0) },
   planBo: d => { S.plan.bo = { ...(S.plan.bo || {}), win: d.v === '1', avg: ($('#boavg') || {}).value } ; savePlan() },
-  planBoSave: () => { const p = S.plan, bo = p.bo || {}, avg = parseFloat(($('#boavg').value || '').replace(',', '.')); if (bo.win == null) return toast('Bitte Gewonnen oder Verloren wählen.'); if (isNaN(avg)) return toast('Bitte deinen Average eintragen.'); p.cur = [avg]; p.bo = null; planFinishGame(p, planGame('bo11'), bo11Pts(bo.win, avg)) },
+  planBoSave: () => { const p = S.plan, bo = p.bo || {}, avg = parseFloat(($('#boavg').value || '').replace(',', '.')); if (bo.win == null) return toast('Bitte Gewonnen oder Verloren wählen.'); if (isNaN(avg)) return toast('Bitte deinen Average eintragen.'); p.cur = [avg]; p.bo = null; planGoals(p); planFinishGame(p, planGame('bo11'), bo11Pts(bo.win, avg, goalOf(p, 'power'))) },
   planAbort: () => S.planAbortAsk = true, planAbortNo: () => S.planAbortAsk = false,
   planAbortYes: () => { S.plan = null; S.planAbortAsk = false; LS.del('darts.plan') }, // abgebrochen: keine Dauer, sonst verfälscht sie den Schnitt
   planClose: () => { S.plan = null; LS.del('darts.plan') },
@@ -1178,6 +1205,7 @@ const A = {
   delMatch: d => { if (S.delAsk === d.v) { Store.del('matches', d.v); S.statMatch = null; S.delAsk = null; toast('Spiel gelöscht') } else S.delAsk = d.v },
   manage: () => { S.manage = !S.manage; S.delAsk = null },
   rename: d => { const n = $('#rename').value.trim(); if (!n) return; Store.put('profiles', d.v, { ...clone(Store.data.profiles[d.v]), name: n }); toast('Gespeichert') },
+  setGoal: d => { const v = parseInt($('#pgoal').value, 10); if (!(v >= 30 && v <= 120)) return toast('Bitte ein Ziel zwischen 30 und 120 eingeben.'); Store.put('profiles', d.v, { ...clone(Store.data.profiles[d.v]), powerGoal: v, powerGoalSince: Date.now() }); toast('Scoring-Ziel: ' + v) },
   delAsk: d => S.delAsk = d.v, delNo: () => S.delAsk = null,
   delYes: d => { Store.del('profiles', d.v); S.setup.players = S.setup.players.filter(x => x !== d.v); LS.set('darts.setup', S.setup); S.statPid = null; S.delAsk = null; toast('Spieler gelöscht') },
   exportData: () => {
