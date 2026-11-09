@@ -907,7 +907,7 @@ function vMatch(m) {
     pad = `<div class="entry">${S.entry || '<span class="muted">0</span>'}</div>
       <div class="quick">${[26, 41, 45, 60, 81, 85, 95, 100, 140, 180].map(v => `<button data-act="quick" data-v="${v}">${v}</button>`).join('')}</div>
       <div class="pad np">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button data-act="key" data-v="${n}">${n}</button>`).join('')}<button class="act" data-act="key" data-v="del">⌫</button><button data-act="key" data-v="0">0</button><button class="ok" data-act="visitOk">OK</button></div>
-      <button class="btn block" data-act="undo">↶ Letzte Aufnahme zurück</button>`;
+      <div class="row"><button class="btn grow" data-act="restOk">Restscore</button><button class="btn grow" data-act="undo">↶ Zurück</button></div>`;
   }
   // Checkout-Weg groß über dem Eingabefeld, sobald ein Finish mit den verbleibenden Darts möglich ist
   let coHint = '';
@@ -1179,6 +1179,16 @@ const A = {
     }
     x01Visit(m, v, 3);
   },
+  // Eingetippte Zahl als Rest nach der Aufnahme werten: geworfen = alter Rest − neuer Rest
+  restOk: () => {
+    const m = S.live; if (isBotTurn(m)) return;
+    if (S.entry === '') return toast('Erst den Rest eintippen, dann Restscore drücken.');
+    const r = +S.entry, rem = remOf(m, curLeg(m), turnOf(m, curLeg(m)));
+    if (r > rem) { S.entry = ''; return toast(`Rest ${r} ist mehr als dein Stand ${rem}.`) }
+    if (rem - r > 180) { S.entry = ''; return toast(`Rest ${r} hieße ${rem - r} geworfen – mit 3 Darts nicht möglich.`) }
+    if (r === 1 && m.out !== 'single') { S.entry = ''; return toast('Rest 1 geht nicht – überworfen? Dann 0 Punkte eintragen.') }
+    S.entry = String(rem - r); A.visitOk();
+  },
   coDarts: d => { const v = S.ask.score; S.ask = null; x01Visit(S.live, v, +d.v) },
   coCancel: () => S.ask = null,
   abort: () => S.abortAsk = true, abortNo: () => S.abortAsk = false,
@@ -1256,6 +1266,7 @@ document.addEventListener('keydown', e => {
   if (!visitPad || e.target.tagName === 'INPUT') return;
   if (/^\d$/.test(e.key)) { A.key({ v: e.key }); render() }
   else if (e.key === 'Backspace') { A.key({ v: 'del' }); render() }
+  else if ((e.key === 'r' || e.key === 'R') && S.tab === 'spielen' && !planVisit) { A.restOk(); render() }
   else if (e.key === 'Enter') { (planVisit ? A.planOk : S.tab === 'spielen' ? A.visitOk : A.trOk)(); render() }
 });
 // Beim Zurückkehren in die App frische Daten holen (andere Geräte, neue Liga-Daten)
