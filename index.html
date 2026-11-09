@@ -607,12 +607,13 @@ const PLAN = [
   { id: 'd40', name: '40', rule: '40 / 20 / 10. Pro getroffenem Doppel 1 Punkt.', rounds: 20, short: 10, goal: 20, input: 'count', target: () => '40' },
   { id: 'd32', name: '32', rule: '32 / 16 / 8. Pro getroffenem Doppel 1 Punkt.', rounds: 20, short: 0, goal: 20, input: 'count', target: () => '32' },
   { id: 'd24', name: '24', rule: '24 / 12 / 6. Pro getroffenem Doppel 1 Punkt.', rounds: 20, short: 0, goal: 20, input: 'count', target: () => '24' },
-  { id: 'bo11', name: 'Best of 11 (HNQ Lvl. 7)', rule: 'Sieg = 5 Punkte. Dazu für den Average: ab 70 = 1, ab 75 = 2, ab 80 = 3, ab 85 = 5 Punkte.', rounds: 1, short: 0, goal: 8, input: 'bo11' }
+  { id: 'bo11', name: 'Best of 11 (HNQ Lvl. 7)', rule: 'Sieg = 5 Punkte. Dazu für den Average: ab 52 = 2, ab 57 = 3, ab 62 = 4, ab 67 = 5 Punkte.', rounds: 1, short: 0, goal: 8, input: 'bo11' }
 ];
 const planGame = id => PLAN.find(g => g.id === id);
 const planRounds = (g, v) => v === 'kurz' ? g.short : g.rounds;
 const savePlan = () => LS.set('darts.plan', S.plan);
-const bo11Pts = (win, avg) => (win ? 5 : 0) + (avg >= 85 ? 5 : avg >= 80 ? 3 : avg >= 75 ? 2 : avg >= 70 ? 1 : 0);
+// Persönliche Average-Stufen (Original-Plan: 70/75/80/85 → 1/2/3/5)
+const bo11Pts = (win, avg) => (win ? 5 : 0) + (avg >= 67 ? 5 : avg >= 62 ? 4 : avg >= 57 ? 3 : avg >= 52 ? 2 : 0);
 const feFmt = v => v == null ? '–' : fmt(v, v % 1 ? 1 : 0);
 function planInput(p, val) {
   const g = planGame(p.steps[p.i]); p.cur.push(val);
@@ -623,11 +624,22 @@ function planFinishGame(p, g, pts) {
   if (pts == null) pts = g.input === 'visit' ? Math.ceil(p.cur.reduce((a, b) => a + b, 0) / n) : p.cur.reduce((a, b) => a + b, 0);
   const fe = g.input === 'visit' || g.input === 'bo11' ? pts : pts * g.rounds / n;
   p.results[g.id] = { pts, played: n, fe: Math.round(fe * 10) / 10 };
-  p.cur = []; p.i++; savePlan();
-  const ids = Object.keys(p.results), punkte = ids.reduce((a, k) => a + p.results[k].fe, 0), ziel = ids.reduce((a, k) => a + planGame(k).goal, 0);
-  Store.put('trainings', p.id, { mode: 'plan', variant: p.variant, pid: p.pid, date: p.date, results: clone(p.results), punkte, ziel, metric: ziel ? punkte / ziel * 100 : 0 });
+  p.cur = []; planStep(p);
   toast(`${g.name}: ${pts} Punkte`);
 }
+// Nächste Einheit; nach der letzten stoppt die Stoppuhr (Start inkl. Warm-Up bis Ende der letzten Einheit)
+function planStep(p) {
+  p.i++; if (p.i >= p.steps.length && !p.end) p.end = Date.now();
+  savePlan(); planSaveDoc(p);
+}
+function planSaveDoc(p) {
+  const ids = Object.keys(p.results); if (!ids.length) return;
+  const punkte = ids.reduce((a, k) => a + p.results[k].fe, 0), ziel = ids.reduce((a, k) => a + planGame(k).goal, 0);
+  Store.put('trainings', p.id, { mode: 'plan', variant: p.variant, pid: p.pid, date: p.date, results: clone(p.results), punkte, ziel, metric: ziel ? punkte / ziel * 100 : 0, ...(p.end ? { dauer: p.end - p.date } : {}) });
+}
+const durFmt = ms => { if (ms == null) return '–'; const m = Math.round(ms / 60000); return m < 60 ? m + ' min' : Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0') + ' h' };
+// Ø Dauer pro Variante aus den gestoppten Sessions (null, solange keine gestoppt ist)
+const planAvgDur = (pid, variant) => { const d = planSessions(pid).filter(s => s.variant === variant && s.dauer).map(s => s.dauer); return d.length ? { ms: d.reduce((a, b) => a + b, 0) / d.length, n: d.length } : null };
 // Zielerreichung immer mit den aktuellen Zielen rechnen, damit geänderte Ziele auch alte Sessions neu bewerten
 const planPct = s => { const ids = Object.keys(s.results).filter(planGame), z = ids.reduce((a, k) => a + planGame(k).goal, 0); return z ? ids.reduce((a, k) => a + s.results[k].fe, 0) / z * 100 : 0 };
 const planSessions = pid => Store.list('trainings').filter(t => t.mode === 'plan' && t.pid === pid && t.results).sort((a, b) => a.date - b.date);
@@ -637,6 +649,7 @@ function planTable(pid) {
   return `<div class="tbl"><table><thead><tr><th>Spiel</th><th class="r">Ziel</th>${ss.map(s => `<th class="r">${dShort(s.date)}${s.variant === 'kurz' ? ' K' : ''}</th>`).join('')}</tr></thead><tbody>
     ${PLAN.map(g => `<tr><td>${esc(g.name)}</td><td class="n">${g.goal}</td>${ss.map(s => { const r = s.results[g.id]; return `<td class="n ${r && r.fe >= g.goal ? 'good' : ''}">${r ? feFmt(r.fe) : ''}</td>` }).join('')}</tr>`).join('')}
     <tr><td><b>Ziel erreicht</b></td><td class="n">100 %</td>${ss.map(s => `<td class="n" style="color:var(--paper)">${fmt(planPct(s), 0)} %</td>`).join('')}</tr>
+    <tr><td>Dauer</td><td></td>${ss.map(s => `<td class="n">${durFmt(s.dauer)}</td>`).join('')}</tr>
   </tbody></table></div><p class="muted small" style="margin:0">K = Kurzplan, hochgerechnet auf die volle Rundenzahl. Blau = Ziel erreicht.</p>`;
 }
 function planCharts(pid) {
@@ -889,11 +902,11 @@ function vMatchEnd(m) {
 // ---------- Ansichten: Training
 function vPlan() {
   const p = S.plan, kurz = p.variant === 'kurz';
-  const head = `<div class="bar"><span class="cap">Trainingsplan ${kurz ? 'kurz' : 'komplett'} · ${esc(pname(p.pid))} · ${Math.min(p.i + 1, p.steps.length)}/${p.steps.length}</span><button class="chip" data-act="planAbort">Beenden</button></div>
+  const head = `<div class="bar"><span class="cap">Trainingsplan ${kurz ? 'kurz' : 'komplett'} · ${esc(pname(p.pid))} · ${Math.min(p.i + 1, p.steps.length)}/${p.steps.length} · ⏱ ${durFmt(Date.now() - p.date)}</span><button class="chip" data-act="planAbort">Beenden</button></div>
     ${S.planAbortAsk ? `<div class="note warn row"><span class="grow">Training beenden? Fertige Spiele bleiben gespeichert.</span><button class="btn danger" data-act="planAbortYes">Beenden</button><button class="btn" data-act="planAbortNo">Weiter</button></div>` : ''}`;
   if (p.i >= p.steps.length) {
     const ids = Object.keys(p.results), punkte = ids.reduce((a, k) => a + p.results[k].fe, 0), ziel = ids.reduce((a, k) => a + planGame(k).goal, 0);
-    return `<section><span class="cap">Trainingsplan ${kurz ? 'kurz' : 'komplett'} · ${esc(pname(p.pid))}</span><h2>${fmt(ziel ? punkte / ziel * 100 : 0, 0)} % vom Ziel</h2>
+    return `<section><span class="cap">Trainingsplan ${kurz ? 'kurz' : 'komplett'} · ${esc(pname(p.pid))} · Dauer ${durFmt(p.end ? p.end - p.date : null)}</span><h2>${fmt(ziel ? punkte / ziel * 100 : 0, 0)} % vom Ziel</h2>
       <div class="tbl"><table><thead><tr><th>Spiel</th><th class="r">Punkte</th><th class="r">Hochgerechnet</th><th class="r">Ziel</th></tr></thead><tbody>
       ${ids.map(k => { const g = planGame(k), r = p.results[k]; return `<tr><td>${esc(g.name)}</td><td class="n">${r.pts}${g.input === 'visit' || g.input === 'bo11' ? '' : ' / ' + r.played}</td><td class="n ${r.fe >= g.goal ? 'good' : ''}">${feFmt(r.fe)}</td><td class="n">${g.goal}</td></tr>` }).join('')}
       <tr><td><b>Summe</b></td><td></td><td class="n" style="color:var(--paper)">${feFmt(Math.round(punkte * 10) / 10)}</td><td class="n">${ziel}</td></tr></tbody></table></div>
@@ -979,10 +992,11 @@ function vTraining() {
   if (def.variants && !def.variants.some(v => v[0] === S.trVar)) S.trVar = def.variants[0][0];
   if (!S.trPid || !Store.data.profiles[S.trPid]) S.trPid = (ps[0] || {}).id || null;
   const kurzNames = PLAN.filter(g => g.short).map(g => g.name).join(', ');
+  const durV = (v, est) => { const d = S.trPid && planAvgDur(S.trPid, v); return d ? 'Ø ' + durFmt(d.ms) : est };
   return `<section><h2>Training</h2><h3>Wer trainiert?</h3>
       <div class="chips">${ps.map(p => `<button class="chip ${p.id === S.trPid ? 'on' : ''}" data-act="trPid" data-v="${p.id}">${esc(p.name)}</button>`).join('') || '<span class="muted small">Lege zuerst unter „Spielen“ einen Spieler an.</span>'}</div></section>
     <section><h3>Trainingsplan</h3>
-      <div class="row"><button class="btn primary grow big" data-act="planStart" data-v="voll" ${S.trPid ? '' : 'disabled'}>Komplett · ca. 2 h</button><button class="btn grow big" data-act="planStart" data-v="kurz" ${S.trPid ? '' : 'disabled'}>Kurz · ca. 25 min</button></div>
+      <div class="row"><button class="btn primary grow big" data-act="planStart" data-v="voll" ${S.trPid ? '' : 'disabled'}>Komplett · ${durV('voll', 'ca. 2 h')}</button><button class="btn grow big" data-act="planStart" data-v="kurz" ${S.trPid ? '' : 'disabled'}>Kurz · ${durV('kurz', 'ca. 25 min')}</button></div>
       <p class="muted small" style="margin:0">Komplett: Warm-Up und alle 10 Spiele. Kurz: 3 Minuten Warm-Up, dann ${esc(kurzNames)} mit weniger Runden. Beide fließen in dieselbe Statistik.</p>
       ${S.trPid ? planTable(S.trPid) : ''}</section>
     ${S.trPid ? `<section><h3>Gegen den Bot</h3><p class="muted small" style="margin:0">501 Double Out. Der Bot wirft ungefähr deinen Average, mit − und + machst du ihn schwächer oder stärker.</p>
@@ -1148,16 +1162,16 @@ const A = {
   trClose: () => { S.tr = null; LS.del('darts.trlive') },
   planStart: d => { if (!S.trPid) return; S.plan = { id: uid(), variant: d.v, pid: S.trPid, date: Date.now(), steps: ['warm', ...PLAN.filter(g => d.v === 'voll' || g.short).map(g => g.id)], i: 0, cur: [], results: {}, warmEnd: null }; S.entry = ''; S.planAbortAsk = false; savePlan(); window.scrollTo(0, 0) },
   planWarm: d => { S.plan.warmEnd = Date.now() + d.v * 60000; savePlan() },
-  planNext: () => { S.plan.i++; S.plan.cur = []; savePlan(); window.scrollTo(0, 0) },
+  planNext: () => { S.plan.cur = []; planStep(S.plan); window.scrollTo(0, 0) },
   planIn: d => planInput(S.plan, +d.v),
   planQuick: d => { S.entry = d.v; A.planOk() },
   planOk: () => { const v = +S.entry || 0; S.entry = ''; if (v > 180 || BAD_VISIT.includes(v)) return toast(v + ' ist mit 3 Darts nicht möglich.'); planInput(S.plan, v) },
   planUndo: () => { S.plan.cur.pop(); savePlan() },
-  planSkip: () => { S.plan.i++; S.plan.cur = []; S.plan.bo = null; savePlan(); window.scrollTo(0, 0) },
+  planSkip: () => { S.plan.cur = []; S.plan.bo = null; planStep(S.plan); window.scrollTo(0, 0) },
   planBo: d => { S.plan.bo = { ...(S.plan.bo || {}), win: d.v === '1', avg: ($('#boavg') || {}).value } ; savePlan() },
   planBoSave: () => { const p = S.plan, bo = p.bo || {}, avg = parseFloat(($('#boavg').value || '').replace(',', '.')); if (bo.win == null) return toast('Bitte Gewonnen oder Verloren wählen.'); if (isNaN(avg)) return toast('Bitte deinen Average eintragen.'); p.cur = [avg]; p.bo = null; planFinishGame(p, planGame('bo11'), bo11Pts(bo.win, avg)) },
   planAbort: () => S.planAbortAsk = true, planAbortNo: () => S.planAbortAsk = false,
-  planAbortYes: () => { S.plan = null; S.planAbortAsk = false; LS.del('darts.plan') },
+  planAbortYes: () => { S.plan = null; S.planAbortAsk = false; LS.del('darts.plan') }, // abgebrochen: keine Dauer, sonst verfälscht sie den Schnitt
   planClose: () => { S.plan = null; LS.del('darts.plan') },
   statPid: d => { S.statPid = d.v; S.delAsk = null },
   statMatch: d => { S.statMatch = d.v; S.delAsk = null; window.scrollTo(0, 0) }, statMatchBack: () => S.statMatch = null,
