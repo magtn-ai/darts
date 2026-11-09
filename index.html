@@ -534,6 +534,8 @@ function matchStats(m) {
     return s;
   });
 }
+// 3-Dart-Average eines Spielers in einem einzelnen Leg (null, solange er dort noch nicht geworfen hat)
+const legAvgP = (l, pi) => { let p = 0, d = 0; l.visits.forEach(v => { if (v.p === pi) { p += v.score; d += v.n } }); return d ? p / d * 3 : null };
 function finishMatch(m) {
   const doc = clone(m); delete doc.pending; delete doc.pendAtts;
   doc.stats = matchStats(m); doc.date = Date.now();
@@ -876,7 +878,9 @@ function vMatch(m) {
     if (isX) {
       const rem = remOf(m, leg, pi) - (act ? m.pending.reduce((a, d) => a + dartVal(d), 0) : 0);
       return `<div class="pl ${act ? 'act' : ''}"><span class="nm">${esc(pname(pid))}${pid === BOT ? ' · Ø ' + m.bot.avg : ''}</span><span class="rem">${rem}</span>
-        <span class="sub"><span>Legs ${won[pi]}</span><span>Ø ${fmt(stats[pi].avg, 1)}</span><span>${stats[pi].darts} D</span></span></div>`;
+        <span class="sub"><span>Legs ${won[pi]}</span><span>${stats[pi].darts} D</span></span>
+        <span class="sub" style="color:var(--paper)"><span>Leg Ø ${fmt(legAvgP(leg, pi), 1)}</span></span>
+        <span class="sub" style="color:var(--paper)"><span>Gesamt Ø ${fmt(stats[pi].avg, 1)}</span></span></div>`;
     }
     const mk = cst.marks[pi];
     return `<div class="pl ${act ? 'act' : ''}"><span class="nm">${esc(pname(pid))}</span><span class="rem" style="font-size:40px">${cst.pts[pi]}</span>
@@ -918,7 +922,11 @@ function vMatchEnd(m) {
   return `<section><h3>Spiel beendet</h3><h2>${esc(pname(m.players[m.winner]))} gewinnt ${w[m.winner]}:${Math.max(0, ...w.filter((_, i) => i !== m.winner))}</h2>
     <div class="tbl"><table><thead><tr><th>Spieler</th><th class="c">Legs</th>${isX ? '<th class="r">Ø</th><th class="r">First 9</th><th class="r">Checkout</th><th class="r">180</th><th class="r">100+</th><th class="r">High Finish</th><th class="r">Bestes Leg</th>' : '<th class="r">MPR</th><th class="r">Darts</th>'}</tr></thead><tbody>
     ${st.map((s, i) => `<tr class="${i === m.winner ? 'me' : ''}"><td>${esc(pname(s.pid))}</td><td class="c mono">${s.legsW}</td>${isX ? `<td class="n" style="color:var(--paper)">${fmt(s.avg, 1)}</td><td class="n">${fmt(s.f9, 1)}</td><td class="n">${s.att ? pct(s.hit, s.att) : '–'}</td><td class="n">${s.s180}</td><td class="n">${s.s100 + s.s140}</td><td class="n">${s.hi || '–'}</td><td class="n">${s.best ?? '–'}</td>` : `<td class="n">${fmt(s.mpr, 2)}</td><td class="n">${s.darts}</td>`}</tr>`).join('')}
-    </tbody></table></div><p class="muted small" style="margin:0">Gespeichert. Die Werte fließen in die Statistik der Spieler ein.</p>
+    </tbody></table></div>
+    ${isX ? `<h3>Average pro Leg</h3><div class="tbl"><table><thead><tr><th>Spieler</th><th class="r">Gesamt</th>${m.legs.map((_, i) => `<th class="r">L${i + 1}</th>`).join('')}</tr></thead><tbody>
+    ${st.map((s, i) => `<tr class="${i === m.winner ? 'me' : ''}"><td>${esc(pname(s.pid))}</td><td class="n" style="color:var(--paper)">${fmt(s.avg, 1)}</td>${m.legs.map(l => `<td class="n" style="${l.winner === i ? 'color:var(--ice)' : ''}">${fmt(legAvgP(l, i), 1)}</td>`).join('')}</tr>`).join('')}
+    </tbody></table></div><p class="muted small" style="margin:0">Blau = Leg gewonnen.</p>` : ''}
+    <p class="muted small" style="margin:0">Gespeichert. Die Werte fließen in die Statistik der Spieler ein.</p>
     ${m.planId && S.plan && S.plan.id === m.planId ? `<div class="note">Für den Trainingsplan zählt: ${S.plan.results.bo11 ? S.plan.results.bo11.pts + ' von 10 Punkten' : '–'}.</div><button class="btn primary block big" data-act="backToPlan">Weiter im Trainingsplan</button>` : `<div class="row"><button class="btn primary grow" data-act="rematch">Revanche</button><button class="btn grow" data-act="newGame">Neues Spiel</button></div>`}
     <button class="link" data-act="fixLast">Letzten Wurf korrigieren</button></section>`;
 }
