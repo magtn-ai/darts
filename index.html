@@ -107,6 +107,7 @@ button.li:hover{background:rgba(60,61,64,.5)}
 .chart .ar{fill:var(--ice);opacity:.1}
 .chart .pt{fill:var(--ice)} .chart .end{fill:var(--void);stroke:var(--ice);stroke-width:2.5}
 .chart .goal{stroke:var(--fog);stroke-width:1;stroke-dasharray:4 4}
+.chart .vl{fill:var(--fog);font-size:12px;font-family:var(--f-mono)}
 .radar{max-width:480px;margin:0 auto;display:block}
 .radar .ax{font-family:var(--f-ui);font-size:13px}
 .radar .rval{fill:var(--paper);font-family:var(--f-mono)}
@@ -599,7 +600,7 @@ const trFy = mode => v => mode === 'dbl' ? fmt(v, 0) + '%' : fmt(v, mode === 'sc
 const PLAN = [
   { id: 'bull', name: 'Bull-Shooter', rule: '3 Darts pro Runde auf Bull. Jedes Bulls-Eye = 1 Punkt.', rounds: 20, short: 10, goal: 10, input: 'count', target: () => 'Bull' },
   { id: 'co1', name: 'Check-Outs I', rule: '3 Darts pro Zahl, von 41 aufwärts, immer +1. Check-Out = 1 Punkt.', rounds: 40, short: 20, goal: 10, input: 'co', target: n => 41 + n },
-  { id: 'power', name: 'Power-Scoring', rule: 'Aufnahmen auf Punkte. Der Average (aufgerundet) ist die Punktzahl.', rounds: 34, short: 10, goal: 90, input: 'visit' },
+  { id: 'power', name: 'Power-Scoring', rule: 'Aufnahmen auf Punkte. Der Average (aufgerundet) ist die Punktzahl.', rounds: 34, short: 10, goal: 67, input: 'visit' }, // persönliches Ziel (Original-Plan: 90)
   { id: 'co2', name: 'Check-Outs II', rule: '3 Darts pro Zahl, von 81 aufwärts, immer +1. Check-Out = 1 Punkt.', rounds: 40, short: 0, goal: 10, input: 'co', target: n => 81 + n },
   { id: 'co25', name: '25 Check-Out', rule: '3 Darts, um Rest 25 zu checken. Check-Out = 1 Punkt.', rounds: 20, short: 10, goal: 10, input: 'co', target: () => 25 },
   { id: 'switch', name: 'Switch', rule: 'Je ein Dart auf T20, T19, T18. Jedes Triple = 1 Punkt. Ein Ausreißer macht die Runde zu 0.', rounds: 20, short: 10, goal: 10, input: 'switch', target: () => 'T20 · T19 · T18' },
@@ -627,19 +628,21 @@ function planFinishGame(p, g, pts) {
   Store.put('trainings', p.id, { mode: 'plan', variant: p.variant, pid: p.pid, date: p.date, results: clone(p.results), punkte, ziel, metric: ziel ? punkte / ziel * 100 : 0 });
   toast(`${g.name}: ${pts} Punkte`);
 }
+// Zielerreichung immer mit den aktuellen Zielen rechnen, damit geänderte Ziele auch alte Sessions neu bewerten
+const planPct = s => { const ids = Object.keys(s.results).filter(planGame), z = ids.reduce((a, k) => a + planGame(k).goal, 0); return z ? ids.reduce((a, k) => a + s.results[k].fe, 0) / z * 100 : 0 };
 const planSessions = pid => Store.list('trainings').filter(t => t.mode === 'plan' && t.pid === pid && t.results).sort((a, b) => a.date - b.date);
 function planTable(pid) {
   const ss = planSessions(pid).slice(-4);
   if (!ss.length) return '<p class="muted small" style="margin:0">Noch keine Session gespeichert. Nach jedem Spiel wird automatisch gesichert.</p>';
   return `<div class="tbl"><table><thead><tr><th>Spiel</th><th class="r">Ziel</th>${ss.map(s => `<th class="r">${dShort(s.date)}${s.variant === 'kurz' ? ' K' : ''}</th>`).join('')}</tr></thead><tbody>
     ${PLAN.map(g => `<tr><td>${esc(g.name)}</td><td class="n">${g.goal}</td>${ss.map(s => { const r = s.results[g.id]; return `<td class="n ${r && r.fe >= g.goal ? 'good' : ''}">${r ? feFmt(r.fe) : ''}</td>` }).join('')}</tr>`).join('')}
-    <tr><td><b>Ziel erreicht</b></td><td class="n">100 %</td>${ss.map(s => `<td class="n" style="color:var(--paper)">${fmt(s.metric, 0)} %</td>`).join('')}</tr>
+    <tr><td><b>Ziel erreicht</b></td><td class="n">100 %</td>${ss.map(s => `<td class="n" style="color:var(--paper)">${fmt(planPct(s), 0)} %</td>`).join('')}</tr>
   </tbody></table></div><p class="muted small" style="margin:0">K = Kurzplan, hochgerechnet auf die volle Rundenzahl. Blau = Ziel erreicht.</p>`;
 }
 function planCharts(pid) {
   const ss = planSessions(pid); if (!ss.length) return '';
   const per = PLAN.map(g => ({ g, pts: ss.filter(s => s.results[g.id]).map(s => ({ x: dShort(s.date), y: s.results[g.id].fe })) })).filter(x => x.pts.length);
-  return `<div class="card"><div class="bar"><span>Zielerreichung</span><span class="cap">${ss.length} Sessions</span></div>${chart(ss.map(s => ({ x: dShort(s.date), y: s.metric })), { h: 150, label: 'Zielerreichung Trainingsplan', fy: v => fmt(v, 0) + '%', goal: 100 })}</div>
+  return `<div class="card"><div class="bar"><span>Zielerreichung</span><span class="cap">${ss.length} Sessions</span></div>${chart(ss.map(s => ({ x: dShort(s.date), y: planPct(s) })), { h: 150, label: 'Zielerreichung Trainingsplan', fy: v => fmt(v, 0) + '%', goal: 100 })}</div>
     ${per.map(({ g, pts }) => `<div class="card"><div class="bar"><span>${esc(g.name)}</span><span class="cap">Ziel ${g.goal} · zuletzt ${feFmt(pts[pts.length - 1].y)} · Best ${feFmt(Math.max(...pts.map(p => p.y)))}</span></div>${chart(pts, { h: 120, label: g.name, fy: v => fmt(v, 0), goal: g.goal })}</div>`).join('')}`;
 }
 setInterval(() => { const el = document.getElementById('warmclock'); if (el && S.plan && S.plan.warmEnd) { const s = Math.max(0, Math.round((S.plan.warmEnd - Date.now()) / 1000)); el.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); if (!s) el.style.color = 'var(--ice)' } }, 1000);
@@ -654,12 +657,14 @@ function chart(pts, { h = 170, fy = v => fmt(v, 1), label = 'Verlauf', goal = nu
   lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step; if (hi === lo) hi = lo + step;
   const X = i => pl + i * (W - pl - pr) / (pts.length - 1), Y = v => pt + (hi - v) / (hi - lo) * (H - pt - pb);
   let g = '';
-  for (let v = lo; v <= hi + 1e-9; v += step) g += `<line class="grid" x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}"/><text class="ax" x="${pl - 6}" y="${Y(v) + 4}" text-anchor="end">${esc(fy(v))}</text>`;
-  if (goal != null) g += `<line class="goal" x1="${pl}" x2="${W - pr}" y1="${Y(goal)}" y2="${Y(goal)}"/><text class="ax" x="${pl + 4}" y="${Y(goal) - 5}">Ziel</text>`;
+  // "Ziel" steht links in der Achsenspalte; Achsenwerte zu nah daran fallen weg
+  for (let v = lo; v <= hi + 1e-9; v += step) g += `<line class="grid" x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}"/>${goal != null && Math.abs(Y(v) - Y(goal)) < 12 ? '' : `<text class="ax" x="${pl - 6}" y="${Y(v) + 4}" text-anchor="end">${esc(fy(v))}</text>`}`;
+  if (goal != null) g += `<line class="goal" x1="${pl}" x2="${W - pr}" y1="${Y(goal)}" y2="${Y(goal)}"/><text class="ax" x="${pl - 6}" y="${Y(goal) + 4}" text-anchor="end">Ziel</text>`;
   const line = pts.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(p.y).toFixed(1)}`).join('');
   const area = `${line}L${X(pts.length - 1)},${Y(lo)}L${X(0)},${Y(lo)}Z`;
   const last = pts[pts.length - 1], lx = X(pts.length - 1), ly = Y(last.y);
-  const dots = pts.length <= 24 ? pts.slice(0, -1).map((p, i) => `<circle class="pt" cx="${X(i)}" cy="${Y(p.y)}" r="2.5"/>`).join('') : '';
+  // Bis 15 Punkte steht an jedem Punkt der Wert, darüber nur am letzten (sonst wird es zu eng)
+  const dots = pts.length <= 24 ? pts.slice(0, -1).map((p, i) => `<circle class="pt" cx="${X(i)}" cy="${Y(p.y)}" r="2.5"/>${pts.length <= 15 ? `<text class="vl" x="${X(i)}" y="${Y(p.y) - 9}" text-anchor="${i ? 'middle' : 'start'}">${esc(fy(p.y))}</text>` : ''}`).join('') : '';
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">${g}<path class="ar" d="${area}"/><path class="ln" d="${line}"/>${dots}
     <circle class="end" cx="${lx}" cy="${ly}" r="4.5"/><text class="lbl" x="${lx - 8}" y="${ly - 10}" text-anchor="end">${esc(fy(last.y))}</text>
     <text class="ax" x="${pl}" y="${H - 6}">${esc(pts[0].x)}</text><text class="ax" x="${W - pr}" y="${H - 6}" text-anchor="end">${esc(last.x)}</text></svg>`;
