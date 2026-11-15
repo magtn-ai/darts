@@ -54,6 +54,13 @@ section{display:flex;flex-direction:column;gap:12px;min-width:0}
 .mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
 .card{background:var(--charcoal);box-shadow:var(--ring);border-radius:var(--r-lg);padding:12px}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
+details.extra>summary{cursor:pointer;color:var(--fog);font-size:14px;padding:4px 0 8px;list-style:none}
+details.extra>summary::-webkit-details-marker{display:none}
+details.extra>summary::before{content:'▸ ';color:var(--ice)}
+details.extra[open]>summary::before{content:'▾ '}
+details.extra>*+*{margin-top:10px}
+.xp{display:inline-flex}.xp .chip:first-child{border-top-right-radius:0;border-bottom-right-radius:0}
+.xp .chip.x{border-top-left-radius:0;border-bottom-left-radius:0;margin-left:-1px;color:var(--fog);padding-inline:10px}
 .chip{height:30px;border:1px solid var(--iron);background:transparent;border-radius:var(--r-sm);padding:0 10px;font-size:14px;font-weight:500;white-space:nowrap}
 .chip.on{border-color:var(--ice);background:var(--ice-08);color:var(--paper)}
 .seg{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
@@ -132,6 +139,22 @@ button.li:hover{background:rgba(60,61,64,.5)}
 .pl .nm{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pl .rem{font-family:var(--f-mono);font-weight:500;font-size:52px;line-height:1.05;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
 .pl .sub{font-size:12px;color:var(--fog);display:flex;gap:10px;flex-wrap:wrap;font-family:var(--f-mono)}
+.pl .nmr{display:flex;justify-content:space-between;align-items:baseline;gap:8px;min-width:0}
+.pl .lg{font-family:var(--f-mono);font-size:12px;color:var(--fog);white-space:nowrap}
+.pl .st{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ice);margin-right:6px;vertical-align:middle}
+.pl .avgs{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-family:var(--f-mono);font-size:15px;font-variant-numeric:tabular-nums}
+.pl .avgs em{display:block;font-style:normal;font-size:11px;color:var(--fog)}
+body.live header.top{display:none}
+body.live main{padding-top:10px}
+body.live #app>section{gap:8px}
+body.live .pl .rem{font-size:44px}
+body.live .entry{font-size:32px;min-height:46px;padding:2px}
+body.live .quick button{height:34px}
+body.live .pad button{height:46px}
+body.live .pad .mods button{height:38px}
+body.live .cohint{padding:6px 12px}
+body.live .cohint b{font-size:19px}
+body.live .btn{padding-block:8px}
 .pl .co{font-family:var(--f-mono);font-size:13px;color:var(--ice);min-height:20px}
 .cohint{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:10px 12px;border-radius:var(--r-lg);background:var(--ice-08);box-shadow:inset 0 0 0 1px var(--ice)}
 .cohint b{font-family:var(--f-mono);font-size:22px;font-weight:500;color:var(--ice);letter-spacing:-.01em}
@@ -264,7 +287,11 @@ const Store = {
   put(c, id, obj) { this.data[c] = { ...this.data[c], [id]: obj }; LS.set('darts.' + c, this.data[c]); this.queue({ op: 'put', c, id, obj }) },
   del(c, id) { const o = { ...this.data[c] }; delete o[id]; this.data[c] = o; LS.set('darts.' + c, o); this.queue({ op: 'del', c, id }) }
 };
-const profiles = () => Store.list('profiles').sort((a, b) => a.name.localeCompare(b.name, 'de'));
+// Maggi ist das Hauptprofil (Training, Bot, Statistik); weitere Spieler sind nur Gegner im Spiel.
+// Entfernte Spieler bekommen hidden: true, damit ihre alten Spiele lesbar bleiben.
+const MAIN_NAME = 'maggi';
+const mainPid = () => { const l = Store.list('profiles').filter(p => !p.hidden); return ((l.find(p => p.name.toLowerCase() === MAIN_NAME) || l.sort((a, b) => (a.created || 0) - (b.created || 0))[0]) || {}).id || null };
+const profiles = () => { const m = mainPid(); return Store.list('profiles').filter(p => !p.hidden).sort((a, b) => (b.id === m) - (a.id === m) || a.name.localeCompare(b.name, 'de')) };
 const pname = id => id === BOT ? 'Bot' : (Store.data.profiles[id] || {}).name || 'Unbekannt';
 
 // ---------- Liga-Daten
@@ -811,7 +838,7 @@ function vRunden() {
   const games = L.spiele.filter(s => s.runde === S.round);
   return `<section><h2>Spieltage</h2><div class="seg">${all.map(r => `<button class="${r === S.round ? 'on' : ''}" data-act="round" data-v="${r}" ${pr.includes(r) ? 'style="color:var(--paper)"' : ''}>${r}</button>`).join('')}</div>
     <h3>Runde ${S.round} · ${esc(games[0] ? games[0].datum : '')}</h3>
-    <div class="list">${games.map(s => { const mine = s.heim === S.team || s.gast === S.team; return `<button class="li ${mine ? 'sel' : ''}" ${s.bericht ? `data-act="reportBy" data-v="${esc(s.heim + '|' + s.gast)}"` : ''}><span class="grow two">${esc(s.heim)}<br><span class="muted">${esc(s.gast)}</span></span><span class="score">${s.setsH != null ? s.setsH + ':' + s.setsG : '–:–'}</span></button>` }).join('')}</div></section>`;
+    <div class="list">${games.map(s => { const mine = s.heim === S.team || s.gast === S.team; return `<button class="li ${mine ? 'sel' : ''}" ${s.bericht || s.setsH != null ? `data-act="reportBy" data-v="${esc(s.heim + '|' + s.gast)}"` : ''}><span class="grow two">${esc(s.heim)}<br><span class="muted">${esc(s.gast)}</span></span><span class="score">${s.setsH != null ? s.setsH + ':' + s.setsG : '–:–'}${s.setsH != null && !s.bericht ? '<br><span class="muted small">ohne Einzel</span>' : ''}</span></button>` }).join('')}</div></section>`;
 }
 function vSpielerRang() {
   const ps = L.players.filter(p => p.legs > 0 && (S.lfilter === 'alle' || p.team === S.team));
@@ -854,11 +881,16 @@ function vReport() {
 function vSpielen() {
   if (S.live && S.live.done) return vMatchEnd(S.live);
   if (S.live) return vMatch(S.live);
-  const st = S.setup, ps = profiles();
+  const st = S.setup, ps = profiles(), main = ps[0], extra = ps.slice(1);
   const modes = [['x01', 501, '501'], ['x01', 301, '301'], ['x01', 701, '701'], ['cricket', 0, 'Cricket']];
+  const chip = p => { const i = st.players.indexOf(p.id); return `<button class="chip ${i >= 0 ? 'on' : ''}" data-act="togglePlayer" data-v="${p.id}">${i >= 0 ? (i + 1) + '. ' : ''}${esc(p.name)}</button>` };
+  const inGame = extra.filter(p => st.players.includes(p.id)).length;
   return `<section><h2>Neues Spiel</h2><h3>Spieler</h3>
-    <div class="chips">${ps.map(p => { const i = st.players.indexOf(p.id); return `<button class="chip ${i >= 0 ? 'on' : ''}" data-act="togglePlayer" data-v="${p.id}">${i >= 0 ? (i + 1) + '. ' : ''}${esc(p.name)}</button>` }).join('') || '<span class="muted small">Noch keine Spieler. Lege unten den ersten an.</span>'}</div>
-    <div class="row"><input type="text" id="newp" class="grow" placeholder="Neuer Spieler, z. B. Leon" maxlength="30" autocomplete="off"><button class="btn" data-act="addProfile">Anlegen</button></div>
+    <div class="chips">${main ? chip(main) : '<span class="muted small">Noch keine Spieler. Lege unten den ersten an.</span>'}</div>
+    <details class="extra" ${S.extraOpen || !main ? 'open' : ''}><summary data-act="extraToggle">Weitere Spieler${extra.length ? ` (${extra.length}${inGame ? `, ${inGame} im Spiel` : ''})` : ''}</summary>
+      <div class="chips">${extra.map(p => `<span class="xp">${chip(p)}<button class="chip x" data-act="hideAsk" data-v="${p.id}" aria-label="${esc(p.name)} entfernen">×</button></span>`).join('') || '<span class="muted small">Noch keine weiteren Spieler.</span>'}</div>
+      ${S.hideAsk && Store.data.profiles[S.hideAsk] ? `<div class="note warn row"><span class="grow">${esc(pname(S.hideAsk))} aus der Liste entfernen? Bisherige Spiele bleiben gespeichert.</span><button class="btn danger" data-act="hideYes">Entfernen</button><button class="btn" data-act="hideNo">Behalten</button></div>` : ''}
+      <div class="row"><input type="text" id="newp" class="grow" placeholder="${main ? 'Weiterer Spieler, z. B. Leon' : 'Dein Name'}" maxlength="30" autocomplete="off"><button class="btn" data-act="addProfile">Hinzufügen</button></div></details>
     ${st.players.length > 1 ? `<button class="link" data-act="shuffle">Reihenfolge mischen</button>` : ''}</section>
     <section><h3>Modus</h3><div class="seg">${modes.map(([t, s, l]) => `<button class="${st.type === t && (t === 'cricket' || st.start === s) ? 'on' : ''}" data-act="mode" data-t="${t}" data-s="${s}">${l}</button>`).join('')}</div>
     <h3>Legs (First to)</h3><div class="seg">${[1, 2, 3, 4, 5].map(n => `<button class="${st.legs === n ? 'on' : ''}" data-act="legs" data-v="${n}">${n}</button>`).join('')}</div>
@@ -871,16 +903,14 @@ function vMatch(m) {
   const leg = curLeg(m), cur = turnOf(m, leg), won = legsWon(m), stats = matchStats(m), isX = m.type === 'x01';
   const cst = isX ? null : crState(m, leg, true);
   const head = `<div class="bar"><span class="cap">${isX ? m.start + ' · ' + { double: 'Double Out', single: 'Single Out', master: 'Master Out' }[m.out] : 'Cricket'} · First to ${m.legsToWin} · Leg ${m.legs.length}</span>
-    <span class="row">${isX ? `<button class="chip" data-act="toggleInput">${m.input === 'dart' ? 'Pro Dart' : 'Pro Aufnahme'} ⇄</button>` : ''}<button class="chip" data-act="abort">Beenden</button></span></div>
+    <span class="row">${m.players.length > 1 ? `<button class="chip" data-act="swapStart">Anwurf ⇄</button>` : ''}${isX ? `<button class="chip" data-act="toggleInput">${m.input === 'dart' ? 'Pro Dart' : 'Pro Aufnahme'} ⇄</button>` : ''}<button class="chip" data-act="abort">Beenden</button></span></div>
     ${S.abortAsk ? `<div class="note warn row"><span class="grow">Spiel ohne Speichern beenden?</span><button class="btn danger" data-act="abortYes">Beenden</button><button class="btn" data-act="abortNo">Weiter</button></div>` : ''}`;
   const cards = m.players.map((pid, pi) => {
     const act = pi === cur;
     if (isX) {
       const rem = remOf(m, leg, pi) - (act ? m.pending.reduce((a, d) => a + dartVal(d), 0) : 0);
-      return `<div class="pl ${act ? 'act' : ''}"><span class="nm">${esc(pname(pid))}${pid === BOT ? ' · Ø ' + m.bot.avg : ''}</span><span class="rem">${rem}</span>
-        <span class="sub"><span>Legs ${won[pi]}</span><span>${stats[pi].darts} D</span></span>
-        <span class="sub" style="color:var(--paper)"><span>Leg Ø ${fmt(legAvgP(leg, pi), 1)}</span></span>
-        <span class="sub" style="color:var(--paper)"><span>Gesamt Ø ${fmt(stats[pi].avg, 1)}</span></span></div>`;
+      return `<div class="pl ${act ? 'act' : ''}"><span class="nmr"><span class="nm">${pi === leg.starter ? '<i class="st" title="Anwurf"></i>' : ''}${esc(pname(pid))}${pid === BOT ? ' · ' + m.bot.avg : ''}</span><span class="lg">Legs ${won[pi]}</span></span><span class="rem">${rem}</span>
+        <span class="avgs"><span><em>Leg Ø</em>${fmt(legAvgP(leg, pi), 1)}</span><span><em>Gesamt Ø</em>${fmt(stats[pi].avg, 1)}</span></span></div>`;
     }
     const mk = cst.marks[pi];
     return `<div class="pl ${act ? 'act' : ''}"><span class="nm">${esc(pname(pid))}</span><span class="rem" style="font-size:40px">${cst.pts[pi]}</span>
@@ -1023,11 +1053,10 @@ function vTraining() {
   }
   const def = TR[S.trSel], ps = profiles();
   if (def.variants && !def.variants.some(v => v[0] === S.trVar)) S.trVar = def.variants[0][0];
-  if (!S.trPid || !Store.data.profiles[S.trPid]) S.trPid = (ps[0] || {}).id || null;
+  S.trPid = mainPid();
   const kurzNames = PLAN.filter(g => g.short).map(g => g.name).join(', ');
   const durV = (v, est) => { const d = S.trPid && planAvgDur(S.trPid, v); return d ? 'Ø ' + durFmt(d.ms) : est };
-  return `<section><h2>Training</h2><h3>Wer trainiert?</h3>
-      <div class="chips">${ps.map(p => `<button class="chip ${p.id === S.trPid ? 'on' : ''}" data-act="trPid" data-v="${p.id}">${esc(p.name)}</button>`).join('') || '<span class="muted small">Lege zuerst unter „Spielen“ einen Spieler an.</span>'}</div></section>
+  return `<section><h2>Training${S.trPid ? ' · ' + esc(pname(S.trPid)) : ''}</h2>${S.trPid ? '' : '<p class="muted small" style="margin:0">Lege zuerst unter „Spielen“ deinen Spieler an.</p>'}</section>
     <section><h3>Trainingsplan</h3>
       <div class="row"><button class="btn primary grow big" data-act="planStart" data-v="voll" ${S.trPid ? '' : 'disabled'}>Komplett · ${durV('voll', 'ca. 2 h')}</button><button class="btn grow big" data-act="planStart" data-v="kurz" ${S.trPid ? '' : 'disabled'}>Kurz · ${durV('kurz', 'ca. 25 min')}</button></div>
       <p class="muted small" style="margin:0">Komplett: Warm-Up und alle 10 Spiele. Kurz: 3 Minuten Warm-Up, dann ${esc(kurzNames)} mit weniger Runden. Beide fließen in dieselbe Statistik.</p>
@@ -1116,6 +1145,8 @@ function render() {
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.t === S.tab));
   const views = { liga: vLiga, spielen: vSpielen, training: vTraining, stats: vStats, settings: vSettings };
   $('#app').innerHTML = views[S.tab]();
+  // Laufendes Spiel: kompakte Ansicht ohne Kopfzeile, damit Stand und Eingabe auf einen Bildschirm passen
+  document.body.classList.toggle('live', S.tab === 'spielen' && !!S.live && !S.live.done);
   $('#stamp').innerHTML = L ? 'Liga-Stand<br>' + esc(new Date(L.aktualisiert).toLocaleString('de-AT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })) : '';
   $('#refreshBtn').classList.toggle('spin', S.refreshing);
   // Bot ist dran: ein Dart nach dem anderen, damit man mitlesen kann
@@ -1141,14 +1172,23 @@ const A = {
   team: d => { S.liga = 'team'; S.viewTeam = d.v || null; S.report = null; S.lplayer = null; window.scrollTo(0, 0) },
   setTeam: d => { S.team = d.v; S.viewTeam = null; LS.set('darts.team', S.team); toast('Mein Team: ' + d.v) },
   round: d => S.round = +d.v,
-  reportBy: d => { const s = L.spiele.find(x => x.heim + '|' + x.gast === d.v); if (s && s.bericht) { S.report = s.bericht; window.scrollTo(0, 0) } else toast('Für dieses Spiel gibt es noch keinen Spielbericht.') },
+  reportBy: d => { const s = L.spiele.find(x => x.heim + '|' + x.gast === d.v); if (s && s.bericht) { S.report = s.bericht; window.scrollTo(0, 0) } else toast('Der WDV hat die Einzel zu diesem Spiel noch nicht eingetragen, nur das Endergebnis. Sie kommen automatisch, sobald sie online sind.') },
   rback: () => { S.report = null },
   lplayer: d => { S.lplayer = d.v; window.scrollTo(0, 0) },
   lplayerGo: d => { S.tab = 'liga'; S.lplayer = d.v; window.scrollTo(0, 0) },
   lback: () => { S.lplayer = null },
   lsort: d => S.lsort = d.v, lfilter: d => S.lfilter = d.v,
   togglePlayer: d => { const p = S.setup.players, i = p.indexOf(d.v); i >= 0 ? p.splice(i, 1) : p.push(d.v); LS.set('darts.setup', S.setup) },
-  addProfile: () => { const el = $('#newp'), n = el.value.trim(); if (!n) return toast('Bitte einen Namen eingeben.'); if (profiles().some(p => p.name.toLowerCase() === n.toLowerCase())) return toast(n + ' gibt es schon.'); const id = uid(); Store.put('profiles', id, { name: n, created: Date.now() }); S.setup.players.push(id); LS.set('darts.setup', S.setup); toast(n + ' angelegt') },
+  addProfile: () => {
+    const el = $('#newp'), n = el.value.trim(); if (!n) return toast('Bitte einen Namen eingeben.');
+    const old = Store.list('profiles').find(p => p.name.toLowerCase() === n.toLowerCase());
+    if (old && !old.hidden) return toast(n + ' gibt es schon.');
+    let id; if (old) { id = old.id; const { hidden, ...rest } = Store.data.profiles[id]; Store.put('profiles', id, rest) } else { id = uid(); Store.put('profiles', id, { name: n, created: Date.now() }) }
+    S.setup.players.push(id); LS.set('darts.setup', S.setup); S.extraOpen = true; toast(old ? old.name + ' ist wieder da' : n + ' hinzugefügt')
+  },
+  extraToggle: (d, b, e) => { e.preventDefault(); S.extraOpen = !S.extraOpen; S.hideAsk = null },
+  hideAsk: d => S.hideAsk = d.v, hideNo: () => S.hideAsk = null,
+  hideYes: () => { const id = S.hideAsk, pr = Store.data.profiles[id]; S.hideAsk = null; if (!pr || id === mainPid()) return; Store.put('profiles', id, { ...clone(pr), hidden: true }); S.setup.players = S.setup.players.filter(x => x !== id); LS.set('darts.setup', S.setup); toast(pr.name + ' entfernt') },
   shuffle: () => { const p = S.setup.players; for (let i = p.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[p[i], p[j]] = [p[j], p[i]] } LS.set('darts.setup', S.setup) },
   mode: d => { S.setup.type = d.t; if (d.t === 'x01') S.setup.start = +d.s; LS.set('darts.setup', S.setup) },
   legs: d => { S.setup.legs = +d.v; LS.set('darts.setup', S.setup) },
@@ -1163,6 +1203,17 @@ const A = {
   botStart: () => startBot(S.trPid, S.botLegs, null),
   planBot: () => { const p = S.plan; if (S.live && !S.live.done && S.live.planId === p.id) { S.tab = 'spielen'; return } startBot(p.pid, 6, p.id) },
   backToPlan: () => { S.live = null; LS.del('darts.live'); S.tab = 'training'; LS.set('darts.tab', 'training'); window.scrollTo(0, 0) },
+  // Anwurf im laufenden Leg an den nächsten Spieler geben; schon eingetragene Aufnahmen wandern mit,
+  // weil sie dann in Wahrheit vom jeweils anderen Spieler geworfen wurden
+  swapStart: () => {
+    const m = S.live, leg = curLeg(m), n = m.players.length;
+    if (m.pending.length) return toast('Erst die laufende Aufnahme beenden.');
+    const s = (leg.starter + 1) % n, moved = leg.visits.map((v, i) => ({ ...v, p: (s + i) % n }));
+    if (m.type === 'x01' && m.players.some((_, pi) => { const r = m.start - moved.filter(v => v.p === pi).reduce((a, v) => a + v.score, 0); return r < 0 || (r === 1 && m.out !== 'single') }))
+      return toast('Geht nicht mehr: Mit getauschtem Anwurf wäre ein Stand ungültig.');
+    leg.starter = s; leg.visits = moved; S.entry = ''; S.ask = null; saveLive();
+    toast(leg.visits.length ? `Aufnahmen getauscht, ${pname(m.players[s])} hat angeworfen` : `${pname(m.players[s])} wirft an`);
+  },
   toggleInput: () => { const m = S.live; if (m.pending.length) return toast('Erst die laufende Aufnahme beenden.'); m.input = m.input === 'dart' ? 'visit' : 'dart'; S.entry = ''; saveLive(); toast(m.input === 'dart' ? 'Eingabe pro Dart' : 'Eingabe pro Aufnahme') },
   key: d => { if (d.v === 'del') S.entry = S.entry.slice(0, -1); else if (S.entry.length < 3) S.entry = (S.entry + d.v).replace(/^0+(?=\d)/, '') },
   quick: d => { S.entry = d.v; A.visitOk() },
