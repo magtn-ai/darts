@@ -155,6 +155,9 @@ body.live .pad .mods button{height:38px}
 body.live .cohint{padding:6px 12px}
 body.live .cohint b{font-size:19px}
 body.live .btn{padding-block:8px}
+.pl .remr{display:flex;justify-content:space-between;align-items:flex-end;gap:6px}
+.pl .dc{font-family:var(--f-mono);font-size:18px;text-align:right;line-height:1.1;padding-bottom:4px}
+.pl .dc em{display:block;font-style:normal;font-size:11px;color:var(--fog)}
 .pl .co{font-family:var(--f-mono);font-size:13px;color:var(--ice);min-height:20px}
 .cohint{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:10px 12px;border-radius:var(--r-lg);background:var(--ice-08);box-shadow:inset 0 0 0 1px var(--ice)}
 .cohint b{font-family:var(--f-mono);font-size:22px;font-weight:500;color:var(--ice);letter-spacing:-.01em}
@@ -563,6 +566,34 @@ function matchStats(m) {
 }
 // 3-Dart-Average eines Spielers in einem einzelnen Leg (null, solange er dort noch nicht geworfen hat)
 const legAvgP = (l, pi) => { let p = 0, d = 0; l.visits.forEach(v => { if (v.p === pi) { p += v.score; d += v.n } }); return d ? p / d * 3 : null };
+const legDarts = (l, pi) => l.visits.reduce((a, v) => a + (v.p === pi ? v.n : 0), 0);
+// Weg zum Checkout: Aufnahmen eines Spielers in einem Leg, bis der Rest bei höchstens 170 bzw. unter 100 liegt (null = nicht erreicht)
+function legPath(m, l, pi) {
+  let rem = m.start, n = 0, r170 = null, r100 = null;
+  for (const v of l.visits) { if (v.p !== pi) continue; n++; rem -= v.score; if (r170 == null && rem <= 170) r170 = n; if (r100 == null && rem < 100) r100 = n }
+  return { r170, r100, rWin: l.winner === pi ? n : null };
+}
+// Schnitt über alle Legs der Spiele; Legs, in denen der Bereich nie erreicht wurde, zählen nicht
+function pathAvg(ms, pid) {
+  const a = { r170: [], r100: [], rWin: [] };
+  ms.forEach(m => { const pi = m.players.indexOf(pid); if (m.type !== 'x01' || pi < 0) return; m.legs.forEach(l => { const w = legPath(m, l, pi); for (const k in a) if (w[k] != null) a[k].push(w[k]) }) });
+  const avg = l => l.length ? l.reduce((x, y) => x + y, 0) / l.length : null;
+  return { r170: avg(a.r170), r100: avg(a.r100), rWin: avg(a.rWin), n170: a.r170.length, n100: a.r100.length, nWin: a.rWin.length };
+}
+// Doppel im Spiel: jeder Dart, der bei einem Rest mit direktem Doppel-Finish (2–40 gerade oder 50) geworfen wurde,
+// ist ein Versuch auf dieses Doppel. Nur Spiele mit Eingabe pro Dart liefern die einzelnen Pfeile.
+function dblStats(ms, pid) {
+  const o = {};
+  ms.forEach(m => {
+    const pi = m.players.indexOf(pid); if (m.type !== 'x01' || m.out === 'single' || pi < 0) return;
+    m.legs.forEach(l => { let rem = m.start; l.visits.forEach(v => {
+      if (v.p !== pi) return;
+      if (v.darts) { let b = rem; v.darts.forEach(d => { if (b === 50 || (b > 0 && b <= 40 && b % 2 === 0)) { const k = b === 50 ? 25 : b / 2, e = o[k] || (o[k] = { k, att: 0, hit: 0 }); e.att++; if (d === 'D' + k) e.hit++ } b -= dartVal(d) }) }
+      rem -= v.score;
+    }) });
+  });
+  return Object.values(o);
+}
 function finishMatch(m) {
   const doc = clone(m); delete doc.pending; delete doc.pendAtts;
   doc.stats = matchStats(m); doc.date = Date.now();
@@ -756,22 +787,25 @@ function radarData(pid) {
     return { k, name, n: l.length, cur: avg(l.slice(-5)), prev: l.length > 5 ? avg(l.slice(-10, -5)) : null };
   });
 }
-function radar(ax) {
-  const W = 460, H = 330, cx = 230, cy = 166, R = 112, MAX = 150, n = ax.length;
+// o: Skala (max, rings, goal) und Texte; Standard = Stärken/Schwächen in % vom Ziel
+function radar(ax, o = {}) {
+  const { max: MAX = 150, rings = [50, 100, 150], goal = 100, val = a => Math.round(a.cur) + '%', tip = a => `${Math.round(a.cur)} % vom Ziel (${a.n} Einträge)`, aria = 'Stärken und Schwächen in Prozent vom Ziel',
+    legend = `<span><i class="lg-cur"></i>Aktuell (letzte 5)</span>${ax.every(a => a.prev != null) ? '<span><i class="lg-prev"></i>Die 5 davor</span>' : ''}<span><i class="lg-goal"></i>Ziel = 100 %</span>` } = o;
+  const W = 460, H = 330, cx = 230, cy = 166, R = 112, n = ax.length;
   const P = (i, v) => { const a = -Math.PI / 2 + i * 2 * Math.PI / n, r = Math.min(v, MAX) / MAX * R; return [cx + r * Math.cos(a), cy + r * Math.sin(a)] };
   const poly = vals => vals.map((v, i) => P(i, v).map(c => c.toFixed(1)).join(',')).join(' ');
-  let g = [50, 100, 150].map(v => `<polygon class="${v === 100 ? 'goal' : 'grid'}" fill="none" points="${poly(ax.map(() => v))}"/>`).join('');
+  let g = [...new Set([...rings, goal])].map(v => `<polygon class="${v === goal ? 'goal' : 'grid'}" fill="none" points="${poly(ax.map(() => v))}"/>`).join('');
   g += ax.map((_, i) => { const [x, y] = P(i, MAX); return `<line class="grid" x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}"/>` }).join('');
   const showPrev = ax.every(a => a.prev != null);
   const prev = showPrev ? `<polygon class="rprev" points="${poly(ax.map(a => a.prev))}"/>` : '';
   const cur = `<polygon class="ar" points="${poly(ax.map(a => a.cur))}"/><polygon class="ln" points="${poly(ax.map(a => a.cur))}"/>`;
-  const dots = ax.map((a, i) => { const [x, y] = P(i, a.cur); return `<circle class="pt" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4"/><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="14" fill="transparent"><title>${esc(a.name)}: ${Math.round(a.cur)} % vom Ziel (${a.n} Einträge)</title></circle>` }).join('');
+  const dots = ax.map((a, i) => { const [x, y] = P(i, a.cur); return `<circle class="pt" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4"/><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="14" fill="transparent"><title>${esc(a.name)}: ${esc(tip(a))}</title></circle>` }).join('');
   const labels = ax.map((a, i) => {
     const [x, y] = P(i, MAX + 22), anc = x > cx + 8 ? 'start' : x < cx - 8 ? 'end' : 'middle', dy = y < cy - R ? -4 : y > cy + R ? 12 : 4;
-    return `<text class="ax" x="${x.toFixed(1)}" y="${(y + dy).toFixed(1)}" text-anchor="${anc}">${esc(a.name)} <tspan class="rval">${Math.round(a.cur)}%</tspan></text>`;
+    return `<text class="ax" x="${x.toFixed(1)}" y="${(y + dy).toFixed(1)}" text-anchor="${anc}">${esc(a.name)} <tspan class="rval">${esc(val(a))}</tspan></text>`;
   }).join('');
-  return `<svg class="chart radar" viewBox="0 0 ${W} ${H}" role="img" aria-label="Stärken und Schwächen in Prozent vom Ziel">${g}${prev}${cur}${dots}${labels}</svg>
-    <div class="legend"><span><i class="lg-cur"></i>Aktuell (letzte 5)</span>${showPrev ? '<span><i class="lg-prev"></i>Die 5 davor</span>' : ''}<span><i class="lg-goal"></i>Ziel = 100 %</span></div>`;
+  return `<svg class="chart radar" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(aria)}">${g}${prev}${cur}${dots}${labels}</svg>
+    <div class="legend">${legend}</div>`;
 }
 function vRadar(pid) {
   const ax = radarData(pid);
@@ -909,7 +943,7 @@ function vMatch(m) {
     const act = pi === cur;
     if (isX) {
       const rem = remOf(m, leg, pi) - (act ? m.pending.reduce((a, d) => a + dartVal(d), 0) : 0);
-      return `<div class="pl ${act ? 'act' : ''}"><span class="nmr"><span class="nm">${pi === leg.starter ? '<i class="st" title="Anwurf"></i>' : ''}${esc(pname(pid))}${pid === BOT ? ' · ' + m.bot.avg : ''}</span><span class="lg">Legs ${won[pi]}</span></span><span class="rem">${rem}</span>
+      return `<div class="pl ${act ? 'act' : ''}"><span class="nmr"><span class="nm">${pi === leg.starter ? '<i class="st" title="Anwurf"></i>' : ''}${esc(pname(pid))}${pid === BOT ? ' · ' + m.bot.avg : ''}</span><span class="lg">Legs ${won[pi]}</span></span><span class="remr"><span class="rem">${rem}</span><span class="dc"><em>Darts</em>${legDarts(leg, pi) + (act ? m.pending.length : 0)}</span></span>
         <span class="avgs"><span><em>Leg Ø</em>${fmt(legAvgP(leg, pi), 1)}</span><span><em>Gesamt Ø</em>${fmt(stats[pi].avg, 1)}</span></span></div>`;
     }
     const mk = cst.marks[pi];
@@ -950,12 +984,15 @@ function vMatch(m) {
 function vMatchEnd(m) {
   const st = m.stats || matchStats(m), isX = m.type === 'x01', w = legsWon(m);
   return `<section><h3>Spiel beendet</h3><h2>${esc(pname(m.players[m.winner]))} gewinnt ${w[m.winner]}:${Math.max(0, ...w.filter((_, i) => i !== m.winner))}</h2>
-    <div class="tbl"><table><thead><tr><th>Spieler</th><th class="c">Legs</th>${isX ? '<th class="r">Ø</th><th class="r">First 9</th><th class="r">Checkout</th><th class="r">180</th><th class="r">100+</th><th class="r">High Finish</th><th class="r">Bestes Leg</th>' : '<th class="r">MPR</th><th class="r">Darts</th>'}</tr></thead><tbody>
-    ${st.map((s, i) => `<tr class="${i === m.winner ? 'me' : ''}"><td>${esc(pname(s.pid))}</td><td class="c mono">${s.legsW}</td>${isX ? `<td class="n" style="color:var(--paper)">${fmt(s.avg, 1)}</td><td class="n">${fmt(s.f9, 1)}</td><td class="n">${s.att ? pct(s.hit, s.att) : '–'}</td><td class="n">${s.s180}</td><td class="n">${s.s100 + s.s140}</td><td class="n">${s.hi || '–'}</td><td class="n">${s.best ?? '–'}</td>` : `<td class="n">${fmt(s.mpr, 2)}</td><td class="n">${s.darts}</td>`}</tr>`).join('')}
+    <div class="tbl"><table><thead><tr><th>Spieler</th><th class="c">Legs</th>${isX ? '<th class="r">Ø</th><th class="r">Darts</th><th class="r">First 9</th><th class="r">Checkout</th><th class="r">180</th><th class="r">100+</th><th class="r">High Finish</th><th class="r">Bestes Leg</th>' : '<th class="r">MPR</th><th class="r">Darts</th>'}</tr></thead><tbody>
+    ${st.map((s, i) => `<tr class="${i === m.winner ? 'me' : ''}"><td>${esc(pname(s.pid))}</td><td class="c mono">${s.legsW}</td>${isX ? `<td class="n" style="color:var(--paper)">${fmt(s.avg, 1)}</td><td class="n">${s.darts}</td><td class="n">${fmt(s.f9, 1)}</td><td class="n">${s.att ? pct(s.hit, s.att) : '–'}</td><td class="n">${s.s180}</td><td class="n">${s.s100 + s.s140}</td><td class="n">${s.hi || '–'}</td><td class="n">${s.best ?? '–'}</td>` : `<td class="n">${fmt(s.mpr, 2)}</td><td class="n">${s.darts}</td>`}</tr>`).join('')}
     </tbody></table></div>
     ${isX ? `<h3>Average pro Leg</h3><div class="tbl"><table><thead><tr><th>Spieler</th><th class="r">Gesamt</th>${m.legs.map((_, i) => `<th class="r">L${i + 1}</th>`).join('')}</tr></thead><tbody>
-    ${st.map((s, i) => `<tr class="${i === m.winner ? 'me' : ''}"><td>${esc(pname(s.pid))}</td><td class="n" style="color:var(--paper)">${fmt(s.avg, 1)}</td>${m.legs.map(l => `<td class="n" style="${l.winner === i ? 'color:var(--ice)' : ''}">${fmt(legAvgP(l, i), 1)}</td>`).join('')}</tr>`).join('')}
-    </tbody></table></div><p class="muted small" style="margin:0">Blau = Leg gewonnen.</p>` : ''}
+    ${st.map((s, i) => `<tr class="${i === m.winner ? 'me' : ''}"><td>${esc(pname(s.pid))}</td><td class="n" style="color:var(--paper)">${fmt(s.avg, 1)}</td>${m.legs.map(l => `<td class="n" style="${l.winner === i ? 'color:var(--ice)' : ''}">${fmt(legAvgP(l, i), 1)}<br><span class="muted small">${legDarts(l, i)} D</span></td>`).join('')}</tr>`).join('')}
+    </tbody></table></div><p class="muted small" style="margin:0">Blau = Leg gewonnen. Darunter die Darts im Leg.</p>
+    <h3>Weg zum Checkout</h3><div class="tbl"><table><thead><tr><th>Spieler</th><th class="r">Ø Aufn. bis 170</th><th class="r">Ø Aufn. unter 100</th></tr></thead><tbody>
+    ${st.map((s, i) => { const w = pathAvg([m], s.pid); return `<tr class="${i === m.winner ? 'me' : ''}"><td>${esc(pname(s.pid))}</td><td class="n">${fmt(w.r170, 1)}</td><td class="n">${fmt(w.r100, 1)}</td></tr>` }).join('')}
+    </tbody></table></div><p class="muted small" style="margin:0">Wie viele Aufnahmen im Schnitt nötig waren, bis der Rest bei 170 oder weniger bzw. unter 100 lag.</p>` : ''}
     <p class="muted small" style="margin:0">Gespeichert. Die Werte fließen in die Statistik der Spieler ein.</p>
     ${m.planId && S.plan && S.plan.id === m.planId ? `<div class="note">Für den Trainingsplan zählt: ${S.plan.results.bo11 ? S.plan.results.bo11.pts + ' von 10 Punkten' : '–'}.</div><button class="btn primary block big" data-act="backToPlan">Weiter im Trainingsplan</button>` : `<div class="row"><button class="btn primary grow" data-act="rematch">Revanche</button><button class="btn grow" data-act="newGame">Neues Spiel</button></div>`}
     <button class="link" data-act="fixLast">Letzten Wurf korrigieren</button></section>`;
@@ -1095,6 +1132,8 @@ function vStats() {
         <div class="kpi"><b>${sum('s140')}</b><span>140+</span></div><div class="kpi"><b>${hi || '–'}</b><span>High Finish</span></div><div class="kpi"><b>${bests.length ? Math.min(...bests) : '–'}</b><span>Bestes Leg</span></div>
         <div class="kpi"><b>${cs.length ? fmt(cDarts ? cMarks / cDarts * 3 : null, 2) : '–'}</b><span>Cricket MPR</span></div><div class="kpi"><b>${ms.length}</b><span>Spiele gesamt</span></div></div>
       <div class="card"><h3 style="margin-bottom:8px">Average pro Spiel</h3>${chart(xs.filter(m => me(m).avg != null).slice(-30).map(m => ({ x: dShort(m.date), y: me(m).avg })), { label: 'Average pro Spiel' })}</div></section>
+    ${vPath(pid, xs)}
+    ${vDoubles(pid, xs)}
     ${lp ? `<section><h3>Liga · ${esc(lp.name)}</h3><div class="kpis"><div class="kpi"><b>${fmt(lp.avg, 1)}</b><span>Ø Liga</span></div><div class="kpi"><b>${lp.singW}-${lp.sing - lp.singW}</b><span>Einzel</span></div><div class="kpi"><b>${lp.best ?? '–'}</b><span>Bestes Leg</span></div></div><button class="link" data-act="lplayerGo" data-v="${esc(lp.name)}">Liga-Verlauf ansehen →</button></section>` : ''}
     ${planSessions(pid).length ? `<section><h3>Trainingsplan</h3>${planCharts(pid)}</section>` : ''}
     <section><h3>Einzelne Übungen</h3>${Object.keys(groups).filter(k => TR[k.split('|')[0]]).length ? Object.entries(groups).map(([k, list]) => {
@@ -1106,6 +1145,38 @@ function vStats() {
     }).join('') : '<p class="muted small" style="margin:0">Noch keine Trainings gespeichert.</p>'}</section>
     <section><h3>Letzte Spiele</h3><div class="list">${ms.slice(-15).reverse().map(m => { const s = me(m), w = m.players[m.winner] === pid; return `<button class="li" data-act="statMatch" data-v="${m.id}"><span class="cap" style="width:40px">${dShort(m.date)}</span><span class="grow">${m.type === 'x01' ? m.start : 'Cricket'} vs. ${m.players.filter(x => x !== pid).map(x => esc(pname(x))).join(', ') || 'Solo'}</span><span class="pill ${w ? 'w' : 'l'}">${w ? 'S' : 'N'}</span><span class="score">${m.type === 'x01' ? fmt(s.avg, 1) : fmt(s.mpr, 2)}</span></button>` }).join('') || '<div class="li muted">Noch keine Spiele.</div>'}</div></section>
     <section><button class="link" data-act="manage">${S.manage ? 'Bearbeiten schließen' : 'Spieler bearbeiten'}</button>${S.manage ? vManage(pr, pid) : ''}</section>`;
+}
+// Weg zum Checkout: wie viele Aufnahmen bis Rest ≤ 170 (zwei hohe Triple + Doppel) und bis unter 100
+function vPath(pid, xs) {
+  const starts = [501, 301, 701].filter(s => xs.some(m => m.start === s));
+  if (!starts.length) return '';
+  const blocks = starts.map(s => {
+    const list = xs.filter(m => m.start === s), w = pathAvg(list, pid);
+    const per = list.map(m => ({ x: dShort(m.date), p: pathAvg([m], pid) })).slice(-30);
+    const c = (k, label) => { const pts = per.filter(q => q.p[k] != null).map(q => ({ x: q.x, y: q.p[k] })); return pts.length >= 2 ? `<div class="card"><div class="bar"><span>${label}</span><span class="cap">weniger ist besser</span></div>${chart(pts, { h: 120, label, fy: v => fmt(v, 1) })}</div>` : '' };
+    return `<h3>${s} · ${list.length} ${list.length === 1 ? 'Spiel' : 'Spiele'}</h3>
+      <div class="kpis"><div class="kpi"><b>${fmt(w.r170, 1)}</b><span>Aufn. bis 170</span></div><div class="kpi"><b>${fmt(w.r100, 1)}</b><span>Aufn. bis unter 100</span></div><div class="kpi"><b>${fmt(w.rWin, 1)}</b><span>Aufn. pro gewonnenem Leg</span></div></div>
+      ${c('r170', `${s}: Aufnahmen bis 170`)}${c('r100', `${s}: Aufnahmen bis unter 100`)}`;
+  }).join('');
+  return `<section><h3>Weg zum Checkout</h3>${blocks}
+    <p class="muted small" style="margin:0">Durchschnitt pro Leg: Aufnahmen, bis dein Rest bei 170 oder weniger liegt (zwei hohe Triple und Doppel) bzw. unter 100. Legs, in denen du den Bereich nicht erreicht hast, zählen nicht mit.</p></section>`;
+}
+// Doppel im Spiel als eigenes Spinnennetz (Trefferquote je Doppel)
+function vDoubles(pid, xs) {
+  const all = dblStats(xs, pid), name = k => k === 25 ? 'Bull' : 'D' + k;
+  if (!all.length) return `<section><h3>Doppel im Spiel</h3><p class="muted small" style="margin:0">Sobald du X01 mit Eingabe „Pro Dart“ spielst, siehst du hier, welche Doppel gut funktionieren.</p></section>`;
+  const order = [...BOARD, 25];
+  const ax = all.filter(d => d.att >= 3).sort((a, b) => order.indexOf(a.k) - order.indexOf(b.k)).map(d => ({ name: name(d.k), cur: d.hit / d.att * 100, n: d.att, hit: d.hit }));
+  const tot = all.reduce((a, d) => ({ att: a.att + d.att, hit: a.hit + d.hit }), { att: 0, hit: 0 });
+  const max = Math.min(100, Math.max(60, Math.ceil(Math.max(...ax.map(a => a.cur), 0) / 20) * 20));
+  const rated = all.filter(d => d.att >= 5).sort((a, b) => b.hit / b.att - a.hit / a.att), k = rated.length >= 6 ? 3 : 2;
+  const item = d => `<div><span class="mono" style="color:var(--paper)">${pct(d.hit, d.att)}</span> ${name(d.k)} <span class="muted small">${d.hit}/${d.att}</span></div>`;
+  return `<section><h3>Doppel im Spiel · ${pct(tot.hit, tot.att)} gesamt</h3>
+    ${ax.length >= 3 ? `<div class="card">${radar(ax, { max, rings: [max / 3, max * 2 / 3, max].map(Math.round), goal: 33, aria: 'Trefferquote je Doppel im Spiel', val: a => `${Math.round(a.cur)}% ${a.hit}/${a.n}`, tip: a => `${a.hit} von ${a.n} getroffen`, legend: '<span><i class="lg-cur"></i>Trefferquote je Doppel</span><span><i class="lg-goal"></i>33 % = jeder dritte Dart</span>' })}</div>` : '<p class="muted small" style="margin:0">Das Spinnennetz erscheint, sobald du auf mindestens drei verschiedene Doppel je dreimal geworfen hast.</p>'}
+    ${rated.length >= 4 ? `<div class="rgrid"><div class="card"><span class="cap">Läuft gut</span>${rated.slice(0, k).map(item).join('')}</div><div class="card"><span class="cap">Woran arbeiten</span>${rated.slice(-k).reverse().map(item).join('')}</div></div>` : ''}
+    <details><summary class="muted small">Alle Doppel</summary><div class="tbl"><table><thead><tr><th>Doppel</th><th class="r">Versuche</th><th class="r">Treffer</th><th class="r">Quote</th></tr></thead><tbody>
+      ${all.sort((a, b) => b.att - a.att).map(d => `<tr><td>${name(d.k)}</td><td class="n">${d.att}</td><td class="n">${d.hit}</td><td class="n" style="color:var(--paper)">${pct(d.hit, d.att)}</td></tr>`).join('')}</tbody></table></div></details>
+    <p class="muted small" style="margin:0">Jeder Dart, den du bei einem Rest mit direktem Doppel-Finish wirfst (2 bis 40 gerade oder 50), zählt als Versuch auf dieses Doppel. Nur Spiele mit Eingabe „Pro Dart“, denn nur dort kennt die App jeden einzelnen Pfeil.</p></section>`;
 }
 function vManage(pr, pid) {
   const opts = L ? L.players.slice().sort((a, b) => (a.team === S.team) !== (b.team === S.team) ? (a.team === S.team ? -1 : 1) : a.name.localeCompare(b.name, 'de')) : [];
