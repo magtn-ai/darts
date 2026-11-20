@@ -114,6 +114,8 @@ details.extra>*+*{margin-top:10px}
 .gspec b{font-weight:500;color:var(--paper)}
 .gspec span{font-size:12px;color:var(--fog)}
 .gset.main{box-shadow:inset 0 0 0 1px var(--ice)}
+.ggrp{display:flex;flex-direction:column;gap:6px;padding-top:8px;border-top:1px solid var(--iron)}
+.ggh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px;font-weight:500}
 .gcard{display:flex;flex-direction:column;gap:8px}
 .gcard.main{box-shadow:inset 0 0 0 1px var(--ice)}
 .gstat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px 4px}
@@ -1367,10 +1369,10 @@ function vGear(pid) {
   if (!GEAR.some(([k]) => lib[k].length) && !es.some(e => gearHas(e.gear))) return `<section><h3>Dart-Setup</h3><p class="muted small" style="margin:0">Lege unter Zahnrad → Dart-Setup deine Barrels, Schäfte, Schaftlängen und Flights an. Dann siehst du hier, mit welchem Setup du wie spielst, und kannst alte Spiele und Trainings nachtragen.</p><button class="link" data-act="tab" data-t="setup">Zum Dart-Setup →</button></section>`;
   const dim = S.gearDim || 'all', keyOf = g => dim === 'all' ? gearLabel(g) : (g && g[dim]) || 'ohne Angabe';
   const G = {};
-  const grp = k => G[k] || (G[k] = { k, m: 0, pts: 0, darts: 0, att: 0, hit: 0, t: 0, sc: [], dbl: [], plan: [], l: 0, lpts: 0, ldarts: 0 });
+  const grp = k => G[k] || (G[k] = { k, m: 0, pts: 0, darts: 0, att: 0, hit: 0, t: 0, sc: [], dbl: [], plan: [], l: 0, lpts: 0, ldarts: 0, llegs: 0, llegsW: 0 });
   es.forEach(e => {
     const r = grp(keyOf(e.gear));
-    if (e.key.startsWith('liga:')) { r.l++; if (e.liga) { r.lpts += e.liga.pts; r.ldarts += e.liga.darts } return }
+    if (e.key.startsWith('liga:')) { r.l++; if (e.liga) { r.lpts += e.liga.pts; r.ldarts += e.liga.darts; r.llegs += e.liga.legs; r.llegsW += e.liga.legsW } return }
     if (e.x01) { r.m++; r.pts += e.x01.pts || 0; r.darts += e.x01.darts || 0; r.att += e.x01.att || 0; r.hit += e.x01.hit || 0 }
     else if (e.key.startsWith('matches:')) r.m++;
     if (e.t) {
@@ -1390,9 +1392,15 @@ function vGear(pid) {
     <div class="seg">${[['all', 'Komplett'], ...GEAR].map(([k, l]) => `<button class="${dim === k ? 'on' : ''}" data-act="gearDim" data-v="${k}">${l}</button>`).join('')}</div>
     ${rows.map(r => { const si = dim === 'all' && r.k !== 'ohne Angabe' ? lib.sets.findIndex(s => gearLabel(s) === r.k) : -1, main = r.k !== 'ohne Angabe' && (dim === 'all' ? si === 0 : r.k === lib.main[dim]);
       const cell = (v, l) => `<div><b>${v}</b><span>${l}</span></div>`;
-      return `<div class="card gcard ${main ? 'main' : ''}"><div class="bar"><span>${si >= 0 ? `<b>${esc(setTitle(si, lib.sets[si]))}</b> · ` : ''}${esc(r.k)}${main && si < 0 ? ' <span class="cap" style="color:var(--ice)">Main 1</span>' : ''}</span><span class="cap">${r.m} ${r.m === 1 ? 'Spiel' : 'Spiele'} · ${r.l} Liga · ${r.t} ${r.t === 1 ? 'Training' : 'Trainings'}</span></div>
-        <div class="gstat">${cell(fmt(r.ldarts ? r.lpts / r.ldarts * 3 : null, 1), 'Ø Liga')}${cell(fmt(r.darts ? r.pts / r.darts * 3 : null, 1), 'Ø Spiel')}${cell(r.att ? pct(r.hit, r.att) : '–', 'Checkout')}${cell(fmt(avg(r.sc), 1), 'Ø Scoring')}${cell(r.dbl.length ? fmt(avg(r.dbl), 0) + ' %' : '–', 'Doppel')}${cell(r.plan.length ? fmt(avg(r.plan), 0) + ' %' : '–', 'Plan')}</div></div>` }).join('')}
-    <p class="muted small" style="margin:0">Ø Liga = dein Einzel-Average an den Liga-Spieltagen. Ø Spiel = 3-Dart-Average in X01 in der App (auch gegen den Bot). Ø Scoring = Scoring-Übung und Power-Scoring aus dem Trainingsplan. Doppel = Doppel-Quote-Übung. Plan = Zielerreichung im Trainingsplan. Blau umrandet ist dein Main 1.</p>
+      return `<div class="card gcard ${main ? 'main' : ''}"><div class="bar"><span>${si >= 0 ? `<b>${esc(setTitle(si, lib.sets[si]))}</b> · ` : ''}${esc(r.k)}${main && si < 0 ? ' <span class="cap" style="color:var(--ice)">Main 1</span>' : ''}</span></span></div>
+        <div class="ggrp liga"><div class="ggh"><span>Liga</span><span class="cap">${r.l ? `${r.l} ${r.l === 1 ? 'Spieltag' : 'Spieltage'}` : 'noch keine Spieltage'}</span></div>
+          ${r.l ? `<div class="gstat">${cell(fmt(r.ldarts ? r.lpts / r.ldarts * 3 : null, 1), 'Ø Einzel')}${cell(r.llegs ? pct(r.llegsW, r.llegs) : '–', 'Legs gewonnen')}${cell(r.ldarts ? r.llegs + '' : '–', 'Legs gespielt')}</div>` : ''}</div>
+        <div class="ggrp"><div class="ggh"><span>Training & App-Spiele</span><span class="cap">${r.m} ${r.m === 1 ? 'Spiel' : 'Spiele'} · ${r.t} ${r.t === 1 ? 'Training' : 'Trainings'}</span></div>
+          ${r.m || r.t ? `<div class="gstat">${cell(fmt(r.darts ? r.pts / r.darts * 3 : null, 1), 'Ø Spiel')}${cell(r.att ? pct(r.hit, r.att) : '–', 'Checkout')}${cell(fmt(avg(r.sc), 1), 'Ø Scoring')}${cell(r.dbl.length ? fmt(avg(r.dbl), 0) + ' %' : '–', 'Doppel')}${cell(r.plan.length ? fmt(avg(r.plan), 0) + ' %' : '–', 'Plan')}</div>` : ''}</div></div>` }).join('')}
+    <div class="note small"><b>So liest du die Karten:</b> Jede Karte ist ein Setup, geteilt in zwei Bereiche.<br>
+      <b>Liga</b>: deine Einzel an den WDV-Spieltagen, also unter Wettkampfdruck. Ø Einzel = 3-Dart-Average, dazu wie viele Legs du gewonnen hast.<br>
+      <b>Training & App-Spiele</b>: alles, was du in der App spielst. Ø Spiel = Average in X01 (auch gegen den Bot), Checkout = Doppelquote im Spiel, Ø Scoring = Scoring-Übung und Power-Scoring, Doppel = Doppel-Quote-Übung, Plan = Zielerreichung im Trainingsplan.<br>
+      Liegt ein Setup im Training deutlich besser als in der Liga, liegt es eher am Druck als am Material. Blau umrandet ist dein Main 1.</div>
     <details class="extra" ${S.gearListOpen ? 'open' : ''}><summary data-act="gearListToggle">Setup nachtragen (${es.filter(e => !gearHas(e.gear)).length} ohne Angabe)</summary>
       <div class="list">${es.slice(0, 40).map(e => `<button class="li ${ed === e.key ? 'sel' : ''}" data-act="gearEdit" data-v="${e.key}"><span class="cap" style="width:40px">${dShort(e.date)}</span><span class="grow two">${esc(e.label)}<br><span class="${gearHas(e.gear) ? 'muted' : ''} small" style="${gearHas(e.gear) ? '' : 'color:var(--ice)'}">${esc(gearLabel(e.gear))}</span></span></button>
         ${ed === e.key ? `<div class="card" style="display:flex;flex-direction:column;gap:8px">${presetList(e.gear, 'gearApply', e.key)}<span class="cap">Oder einzeln</span>${gearSelects(e.gear, 'gearedit', e.key)}</div>` : ''}`).join('')}</div>
