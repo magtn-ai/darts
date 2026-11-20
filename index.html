@@ -832,6 +832,49 @@ function vLiga() {
   return `<section><div class="seg" role="tablist">${tabs.map(([k, l]) => `<button class="${S.liga === k ? 'on' : ''}" data-act="liga" data-v="${k}">${l}</button>`).join('')}</div></section>${body}
     <p class="muted small" style="margin:0">Quelle: wdv-dart.at, ${L.division}. Division, Saison ${esc(L.saison)}. Ø = 3-Dart-Average aus den Einzeln der Spielberichte.</p>`;
 }
+// Voraussichtliche Aufstellung aus den letzten Spielberichten: je Set, wer dort zuletzt gespielt hat,
+// neuere Spiele zählen mehr. Im Einzel spielt jeder höchstens einmal, im Doppel zählt das Paar.
+const LINEUP_N = 6, LINEUP_DECAY = .8;
+function lineup(team) {
+  const bs = L.berichte.filter(b => b.heim === team || b.gast === team).sort((a, b) => b.runde - a.runde).slice(0, LINEUP_N);
+  if (!bs.length) return null;
+  const tot = bs.reduce((a, _, i) => a + LINEUP_DECAY ** i, 0), cnt = {};
+  bs.forEach((b, i) => { const side = b.heim === team ? 'heim' : 'gast'; b.sets.forEach(s => {
+    const who = s[side].spieler.filter(n => !/nicht angetreten|\[name\]/i.test(n)).sort((x, y) => x.localeCompare(y, 'de')).join(' / '); if (!who) return;
+    const c = cnt[s.nr] || (cnt[s.nr] = { nr: s.nr, typ: s.typ, w: {} }); c.w[who] = (c.w[who] || 0) + LINEUP_DECAY ** i;
+  }) });
+  const slots = Object.values(cnt).sort((a, b) => a.nr - b.nr), used = new Set();
+  // Einzel: stärkste Zuordnung zuerst, damit niemand zweimal auftaucht
+  slots.filter(s => s.typ === 'einzel').flatMap(s => Object.entries(s.w).map(([p, w]) => ({ s, p, w }))).sort((a, b) => b.w - a.w)
+    .forEach(({ s, p, w }) => { if (!s.pick && !used.has(p)) { s.pick = p; s.pw = w; used.add(p) } });
+  // Doppel: direkt aufeinanderfolgende Doppel-Sets (z. B. 3 und 4) laufen parallel, dort spielt jeder nur einmal.
+  // Je Block wird die Kombination mit dem höchsten Gesamtgewicht gesucht.
+  const blocks = []; slots.forEach((s, i) => { if (s.typ === 'einzel') return; if (i && slots[i - 1].typ !== 'einzel' && slots[i - 1].nr === s.nr - 1) blocks[blocks.length - 1].push(s); else blocks.push([s]) });
+  blocks.forEach(bl => {
+    let best = null;
+    const go = (i, taken, sum, picks) => {
+      if (i === bl.length) { if (!best || sum > best.sum) best = { sum, picks }; return }
+      const c = Object.entries(bl[i].w).filter(([p]) => !p.split(' / ').some(x => taken.has(x)));
+      if (!c.length) return go(i + 1, taken, sum, [...picks, null]);
+      c.forEach(([p, w]) => go(i + 1, new Set([...taken, ...p.split(' / ')]), sum + w, [...picks, [p, w]]));
+    };
+    go(0, new Set(), 0, []);
+    bl.forEach((s, i) => { const q = best.picks[i]; if (q) { s.pick = q[0]; s.pw = q[1] } });
+  });
+  slots.forEach(s => {
+    s.alt = Object.entries(s.w).filter(([p]) => p !== s.pick).sort((a, b) => b[1] - a[1])[0] || null;
+    s.pct = Math.round((s.pw || 0) / tot * 100);
+  });
+  return { slots, n: bs.length };
+}
+function vLineup(team, next) {
+  const lu = lineup(team); if (!lu) return '';
+  const me = (Store.data.profiles[mainPid()] || {}).wdv;
+  const nm = p => esc(p).split(' / ').map(x => x === me ? `<b style="color:var(--ice)">${x}</b>` : x).join(' / ');
+  return `<section><h3>Voraussichtliche Aufstellung${next ? ' · Runde ' + next.runde : ''}</h3><div class="list">
+    ${lu.slots.map(s => `<div class="li"><span class="cap" style="width:52px">Set ${s.nr}<br>${s.typ === 'einzel' ? 'Einzel' : 'Doppel'}</span><span class="grow two">${s.pick ? nm(s.pick) : '–'}${s.alt ? `<br><span class="muted small">sonst ${nm(s.alt[0])}</span>` : ''}</span><span class="score">${s.pick ? s.pct + ' %' : ''}</span></div>`).join('')}
+  </div><p class="muted small" style="margin:0">Rein statistisch aus den letzten ${lu.n} Spielberichten, neuere zählen mehr. Die Prozentzahl sagt, wie sicher dieser Platz zuletzt so besetzt war.</p></section>`;
+}
 function vTeam(team) {
   const row = teamRow(team) || {}, info = teamInfo(team), today = new Date(); today.setHours(0, 0, 0, 0);
   const games = L.spiele.filter(s => s.heim === team || s.gast === team);
@@ -853,6 +896,7 @@ function vTeam(team) {
     <div class="kpis"><div class="kpi"><b>${row.platz || '–'}.</b><span>Platz</span></div><div class="kpi"><b>${row.g || 0}-${row.u || 0}-${row.v || 0}</b><span>S-U-N</span></div>
       <div class="kpi"><b>${fmt(row.setsG, 0)}:${row.setsV ?? '–'}</b><span>Sets</span></div></div></section>
     ${nx}
+    ${vLineup(team, next)}
     <section><h3>Ergebnisse</h3><div class="list">${done.map(s => `<button class="li" data-act="reportBy" data-v="${esc(s.heim + '|' + s.gast)}"><span class="cap" style="width:28px">R${s.runde}</span><span class="grow">${s.heim === team ? 'vs. ' + esc(s.gast) : '@ ' + esc(s.heim)}</span>${resPill(s, team)}<span class="score">${s.heim === team ? s.setsH + ':' + s.setsG : s.setsG + ':' + s.setsH}</span></button>`).join('') || '<div class="li muted">Noch keine Ergebnisse.</div>'}</div></section>
     <section><h3>Spieler</h3><div class="tbl"><table><thead><tr><th>Spieler</th><th class="r">Ø</th><th class="c">Einzel</th><th class="c">Legs</th><th class="c">Doppel</th><th class="r">Best</th><th class="r">180</th><th class="r">HiFi</th></tr></thead><tbody>
       ${players.map(p => `<tr class="tap" data-act="lplayer" data-v="${esc(p.name)}"><td>${esc(p.name)}</td><td class="n" style="color:var(--paper)">${fmt(p.avg, 1)}</td><td class="c mono">${p.singW}-${p.sing - p.singW}</td><td class="c mono">${p.legsW}-${p.legs - p.legsW}</td><td class="c mono">${p.dblW}-${p.dbl - p.dblW}</td><td class="n">${p.best ?? '–'}</td><td class="n">${p.s180 || '–'}</td><td class="n">${p.hifi ?? '–'}</td></tr>`).join('')}
