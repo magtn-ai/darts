@@ -7,6 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Dirty Checkers Darts</title>
 <meta name="theme-color" content="#141415">
+<script>try { document.documentElement.dataset.theme = JSON.parse(localStorage.getItem("darts.theme")) || "dark" } catch { document.documentElement.dataset.theme = "dark" }</script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -24,8 +25,30 @@
   --fog:#acadae; --paper:#ffffff; --ice:#83c3ff; --neg:#e24756;
   --ice-08:rgba(131,195,255,.08); --ice-20:rgba(131,195,255,.2); --neg-15:rgba(226,71,86,.16); --ring:inset 0 0 0 1px rgba(255,255,255,.08);
   --f-ui:Inter,"Segoe UI",system-ui,sans-serif; --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
-  --r-sm:4px; --r-lg:8px; color-scheme:dark;
+  --r-sm:4px; --r-lg:8px; --hover:rgba(60,61,64,.5); color-scheme:dark;
 }
+/* Helles Design: gleiche Rollen, eigene Stufen (Hintergrund hell, Text dunkel, Akzent dunkleres Blau für Kontrast).
+   data-theme="light" = immer hell, "system" = hell, wenn das Handy hell eingestellt ist. */
+:root[data-theme="light"]{
+  --void:#f3f4f6; --obsidian:#ffffff; --charcoal:#ffffff; --graphite:#eceef1; --slate:#dde0e5; --iron:#d3d6dc;
+  --fog:#5b6068; --paper:#14161a; --ice:#1a6bc0; --neg:#c42b3b;
+  --ice-08:rgba(26,107,192,.08); --ice-20:rgba(26,107,192,.16); --neg-15:rgba(196,43,59,.12); --ring:inset 0 0 0 1px rgba(0,0,0,.09);
+  --hover:rgba(0,0,0,.04); color-scheme:light;
+}
+@media (prefers-color-scheme: light){
+  :root[data-theme="system"]{
+    --void:#f3f4f6; --obsidian:#ffffff; --charcoal:#ffffff; --graphite:#eceef1; --slate:#dde0e5; --iron:#d3d6dc;
+    --fog:#5b6068; --paper:#14161a; --ice:#1a6bc0; --neg:#c42b3b;
+    --ice-08:rgba(26,107,192,.08); --ice-20:rgba(26,107,192,.16); --neg-15:rgba(196,43,59,.12); --ring:inset 0 0 0 1px rgba(0,0,0,.09);
+    --hover:rgba(0,0,0,.04); color-scheme:light;
+  }
+}
+.menu{position:fixed;z-index:20;top:calc(env(safe-area-inset-top,0px) + 54px);right:max(16px,env(safe-area-inset-right,0px));min-width:240px;background:var(--charcoal);box-shadow:var(--ring),0 8px 24px rgba(0,0,0,.25);border-radius:var(--r-lg);display:flex;flex-direction:column;overflow:hidden}
+.menu button{border:0;background:none;text-align:left;padding:12px 14px;display:flex;flex-direction:column;gap:2px;font-weight:500;border-bottom:1px solid var(--iron)}
+.menu button:last-child{border-bottom:0}
+.menu button:hover{background:var(--hover)}
+.menu button span{font-size:12px;font-weight:400;color:var(--fog)}
+section.sep{border-top:1px solid var(--iron);padding-top:20px}
 *{box-sizing:border-box}
 html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);background:var(--void)}
 body{margin:0;background:var(--void);color:var(--paper);font-family:var(--f-ui);font-size:14px;line-height:1.5;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-bottom:calc(72px + env(safe-area-inset-bottom,0px));-webkit-tap-highlight-color:transparent}
@@ -113,7 +136,7 @@ tr:last-child td{border-bottom:0}
 tr.me td{background:var(--ice-08)}
 tr.me td:first-child{box-shadow:inset 2px 0 0 var(--ice)}
 tr.tap{cursor:pointer}
-tr.tap:hover td{background:rgba(60,61,64,.5)}
+tr.tap:hover td{background:var(--hover)}
 .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .kpi{background:var(--charcoal);box-shadow:var(--ring);border-radius:var(--r-lg);padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
 .kpi b{font-family:var(--f-mono);font-size:20px;font-weight:500;line-height:1.25;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -123,7 +146,7 @@ tr.tap:hover td{background:rgba(60,61,64,.5)}
 .list{display:flex;flex-direction:column;background:var(--charcoal);box-shadow:var(--ring);border-radius:var(--r-lg);overflow:hidden}
 .li{display:flex;align-items:center;gap:10px;padding:0 12px;min-height:48px;border:0;border-bottom:1px solid var(--iron);background:none;width:100%;text-align:left;min-width:0}
 .li:last-child{border-bottom:0}
-button.li:hover{background:rgba(60,61,64,.5)}
+button.li:hover{background:var(--hover)}
 .li.sel{box-shadow:inset 2px 0 0 var(--ice);background:var(--ice-08)}
 .li .grow{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .li .two{white-space:normal;padding-block:8px}
@@ -243,8 +266,9 @@ nav.tabs svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1
     <div class="brand"><i></i>Dirty Checkers</div>
     <div class="stamp" id="stamp"></div>
     <button class="ibtn" id="refreshBtn" data-act="refreshLiga" aria-label="Liga-Daten aktualisieren"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
-    <button class="ibtn" data-act="tab" data-t="settings" aria-label="Einstellungen"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+    <button class="ibtn" data-act="menu" aria-label="Menü" aria-haspopup="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </header>
+  <div id="menu" class="menu" role="menu" hidden><button role="menuitem" data-act="tab" data-t="setup">Dart-Setup<span>Sets und Teile</span></button><button role="menuitem" data-act="tab" data-t="settings">Einstellungen<span>Darstellung, Team, Daten, App-Schlüssel</span></button></div>
   <main id="app"><section><h2>Lade …</h2></section></main>
 </div>
 <nav class="tabs" id="nav">
@@ -272,6 +296,13 @@ const LS = {
   del(k) { try { localStorage.removeItem(k) } catch {} }
 };
 const clone = o => JSON.parse(JSON.stringify(o));
+// Hell / Dunkel / System: data-theme am html steuert die Farbstufen, theme-color färbt die Browserleiste mit
+function applyTheme() {
+  const t = LS.get('darts.theme', 'dark'), light = t === 'light' || (t === 'system' && matchMedia('(prefers-color-scheme: light)').matches);
+  document.documentElement.dataset.theme = t;
+  document.querySelector('meta[name=theme-color]').content = light ? '#ffffff' : '#141415';
+}
+applyTheme(); matchMedia('(prefers-color-scheme: light)').addEventListener('change', applyTheme);
 const pDate = s => { const [d, m, y] = s.split('.'); return new Date(+y, m - 1, +d) };
 const dShort = ts => new Date(ts).toLocaleDateString('de-AT', { day: '2-digit', month: '2-digit' });
 let toastT;
@@ -369,7 +400,7 @@ function gearSelects(g, chg, v = '') {
 // Auswahl vor Spiel/Training
 function gearPick() {
   const lib = gearLib();
-  if (!GEAR.some(([k]) => lib[k].length)) return `<section><h3>Dart-Setup</h3><p class="muted small" style="margin:0">Lege in den Einstellungen deine Barrels, Schäfte und Flights an. Dann speichert jedes Spiel und Training, womit du gespielt hast.</p><button class="link" data-act="tab" data-t="settings">Zu den Einstellungen →</button></section>`;
+  if (!GEAR.some(([k]) => lib[k].length)) return `<section><h3>Dart-Setup</h3><p class="muted small" style="margin:0">Lege unter Zahnrad → Dart-Setup deine Barrels, Schäfte und Flights an. Dann speichert jedes Spiel und Training, womit du gespielt hast.</p><button class="link" data-act="tab" data-t="setup">Zum Dart-Setup →</button></section>`;
   const g = gearNow(), i = setOf(g);
   return `<section><details class="extra" ${S.gearOpen ? 'open' : ''}><summary data-act="gearToggle">Dart-Setup: ${i >= 0 ? `<b>${esc(setTitle(i, gearLib().sets[i]))}</b> · ` : ''}${esc(gearLabel(g))}${i < 0 && gearHas(g) ? ' <span class="small" style="color:var(--ice)">(individuell)</span>' : ''}</summary>
     ${presetList(g, 'gearPreset')}
@@ -1333,7 +1364,7 @@ function gearEntries(pid) {
 }
 function vGear(pid) {
   const lib = gearLib(), es = gearEntries(pid);
-  if (!GEAR.some(([k]) => lib[k].length) && !es.some(e => gearHas(e.gear))) return `<section><h3>Dart-Setup</h3><p class="muted small" style="margin:0">Lege in den Einstellungen deine Barrels, Schäfte, Schaftlängen und Flights an. Dann siehst du hier, mit welchem Setup du wie spielst, und kannst alte Spiele und Trainings nachtragen.</p><button class="link" data-act="tab" data-t="settings">Zu den Einstellungen →</button></section>`;
+  if (!GEAR.some(([k]) => lib[k].length) && !es.some(e => gearHas(e.gear))) return `<section><h3>Dart-Setup</h3><p class="muted small" style="margin:0">Lege unter Zahnrad → Dart-Setup deine Barrels, Schäfte, Schaftlängen und Flights an. Dann siehst du hier, mit welchem Setup du wie spielst, und kannst alte Spiele und Trainings nachtragen.</p><button class="link" data-act="tab" data-t="setup">Zum Dart-Setup →</button></section>`;
   const dim = S.gearDim || 'all', keyOf = g => dim === 'all' ? gearLabel(g) : (g && g[dim]) || 'ohne Angabe';
   const G = {};
   const grp = k => G[k] || (G[k] = { k, m: 0, pts: 0, darts: 0, att: 0, hit: 0, t: 0, sc: [], dbl: [], plan: [], l: 0, lpts: 0, ldarts: 0 });
@@ -1435,24 +1466,34 @@ function vGearLib() {
       <div class="row"><input type="text" id="gadd-${k}" class="grow" maxlength="40" autocomplete="off" placeholder="${{ barrel: 'z. B. Target Phil Taylor 22 g', point: 'z. B. 26 mm', shaft: 'z. B. Carbon, Alu, Nylon', length: 'z. B. Short 35 mm', flight: 'z. B. Standard, Slim' }[k]}"><button class="btn" data-act="gearAdd" data-k="${k}">Hinzufügen</button></div></div>`).join('')}
     <p class="muted small" style="margin:0">Aus diesen Teilen stellst du oben deine Sets zusammen. Entfernst du ein Teil, bleibt es bei alten Spielen und bestehenden Sets trotzdem gespeichert.</p></section>`;
 }
+// Eigene Seite fürs Dart-Setup (Zahnrad → Dart-Setup)
+function vSetup() {
+  return `<section><button class="link" data-act="tab" data-t="${S.back || 'liga'}">← Zurück</button><h2>Dart-Setup</h2></section>${vGearLib()}`;
+}
+// Einstellungen: Alltägliches oben, Datensicherung und App-Schlüssel getrennt darunter
 function vSettings() {
   const st = { ok: 'Verbunden. Spiele und Trainings werden auf allen Geräten gespeichert.', offline: 'Gerade keine Verbindung. Alles wird lokal gesichert und später übertragen.', badkey: 'Der App-Schlüssel stimmt nicht.', nokey: 'Noch kein App-Schlüssel eingetragen. Bis dahin wird nur auf diesem Gerät gespeichert.', lokal: 'Verbinde …' }[Store.state];
-  return `<section><button class="link" data-act="tab" data-t="liga">← Zurück</button><h2>Einstellungen</h2></section>
-    <section><h3>Geräte verbinden</h3><div class="note ${Store.state === 'ok' ? '' : 'warn'}">${st}${Store.outbox.length ? ` (${Store.outbox.length} noch nicht übertragen)` : ''}</div>
-      <label class="f">App-Schlüssel<div class="row"><input type="password" id="appkey" class="grow" value="${esc(Store.key)}" autocomplete="off" placeholder="Schlüssel eingeben"><button class="btn primary" data-act="saveKey">Verbinden</button></div></label>
-      <p class="muted small" style="margin:0">Trag auf jedem Gerät denselben Schlüssel ein, dann siehst du überall dieselben Spieler, Spiele und Trainings.</p></section>
-    <section><h3>Datensicherung</h3><p class="muted" style="margin:0">Speichert alle Spieler, Spiele und Trainings als Datei auf diesem Gerät. Mit „Sicherung einspielen“ holst du sie zurück. Vorhandenes bleibt dabei erhalten.</p>
-      <div class="row"><button class="btn grow" data-act="exportData">Daten exportieren</button><label class="btn grow" style="text-align:center;cursor:pointer">Sicherung einspielen<input type="file" id="importfile" accept=".json,application/json" data-chg="import" hidden></label></div></section>
-    ${vGearLib()}
+  const ok = Store.state === 'ok', th = LS.get('darts.theme', 'dark');
+  return `<section><button class="link" data-act="tab" data-t="${S.back || 'liga'}">← Zurück</button><h2>Einstellungen</h2></section>
+    <section><h3>Darstellung</h3><div class="seg">${[['system', 'System'], ['light', 'Hell'], ['dark', 'Dunkel']].map(([k, l]) => `<button class="${th === k ? 'on' : ''}" data-act="theme" data-v="${k}">${l}</button>`).join('')}</div>
+      <p class="muted small" style="margin:0">„System“ folgt der Einstellung deines Handys.</p></section>
     <section><h3>Mein Team</h3><select id="myteam" data-chg="myteam">${(L ? L.teams : [{ name: S.team }]).map(t => `<option ${t.name === S.team ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></section>
-    <section><h3>Auf den Homescreen</h3><p class="muted" style="margin:0">iPhone: in Safari auf Teilen tippen, dann „Zum Home-Bildschirm“. Android: im Chrome-Menü „App installieren“ oder „Zum Startbildschirm hinzufügen“.</p></section>
-    <section><h3>Liga-Daten</h3><p class="muted" style="margin:0">${L ? 'Stand ' + new Date(L.aktualisiert).toLocaleString('de-AT') + '. ' : ''}Werden täglich automatisch geholt, donnerstags und freitags zusätzlich abends. Mit dem Pfeil oben rechts jederzeit sofort.</p></section>`;
+    <section><h3>Liga-Daten</h3><p class="muted" style="margin:0">${L ? 'Stand ' + new Date(L.aktualisiert).toLocaleString('de-AT') + '. ' : ''}Werden täglich automatisch geholt, donnerstags und freitags zusätzlich abends. Mit dem Pfeil oben rechts jederzeit sofort.</p></section>
+    <section><h3>Auf den Homescreen</h3><p class="muted" style="margin:0">iPhone: in Safari auf Teilen tippen, dann „Zum Home-Bildschirm“. Android: im Browser-Menü „App installieren“ oder „Zum Startbildschirm hinzufügen“.</p></section>
+    <section class="sep"><h3>Daten & Verbindung</h3>
+      <div class="card" style="display:flex;flex-direction:column;gap:10px"><span>Datensicherung</span><p class="muted small" style="margin:0">Speichert alle Spieler, Spiele und Trainings als Datei auf diesem Gerät. Mit „Sicherung einspielen“ holst du sie zurück. Vorhandenes bleibt dabei erhalten.</p>
+        <div class="row"><button class="btn grow" data-act="exportData">Daten exportieren</button><label class="btn grow" style="text-align:center;cursor:pointer">Sicherung einspielen<input type="file" id="importfile" accept=".json,application/json" data-chg="import" hidden></label></div></div>
+      <div class="card"><details class="extra" ${ok ? '' : 'open'}><summary>Geräte verbinden · ${ok ? '<span style="color:var(--ice)">verbunden</span>' : '<span style="color:var(--neg)">nicht verbunden</span>'}</summary>
+        <div class="note ${ok ? '' : 'warn'}">${st}${Store.outbox.length ? ` (${Store.outbox.length} noch nicht übertragen)` : ''}</div>
+        <label class="f">App-Schlüssel<div class="row"><input type="password" id="appkey" class="grow" value="${esc(Store.key)}" autocomplete="off" placeholder="Schlüssel eingeben"><button class="btn primary" data-act="saveKey">Verbinden</button></div></label>
+        <p class="muted small" style="margin:0">Trag auf jedem Gerät denselben Schlüssel ein, dann siehst du überall dieselben Spieler, Spiele und Trainings.</p></details></div></section>`;
 }
 
 // ---------- Rendern
 function render() {
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.t === S.tab));
-  const views = { liga: vLiga, spielen: vSpielen, training: vTraining, stats: vStats, settings: vSettings };
+  $('#menu').hidden = !S.menu;
+  const views = { liga: vLiga, spielen: vSpielen, training: vTraining, stats: vStats, settings: vSettings, setup: vSetup };
   $('#app').innerHTML = views[S.tab]();
   // Laufendes Spiel: kompakte Ansicht ohne Kopfzeile, damit Stand und Eingabe auf einen Bildschirm passen
   document.body.classList.toggle('live', S.tab === 'spielen' && !!S.live && !S.live.done);
@@ -1475,7 +1516,7 @@ function startBot(pid, legs, planId) {
   S.tab = 'spielen'; LS.set('darts.tab', 'spielen'); window.scrollTo(0, 0);
 }
 const A = {
-  tab: d => { S.tab = d.t; if (d.t !== 'settings') LS.set('darts.tab', S.tab); S.report = null; S.lplayer = null; S.statMatch = null; window.scrollTo(0, 0) },
+  tab: d => { if (d.t === 'settings' || d.t === 'setup') { if (S.tab !== 'settings' && S.tab !== 'setup') S.back = S.tab } else LS.set('darts.tab', d.t); S.tab = d.t; S.menu = false; S.report = null; S.lplayer = null; S.statMatch = null; window.scrollTo(0, 0) },
   refreshLiga: () => { refreshLiga(); Store.sync() },
   liga: d => { S.liga = d.v; if (d.v === 'team') S.viewTeam = null },
   team: d => { S.liga = 'team'; S.viewTeam = d.v || null; S.report = null; S.lplayer = null; window.scrollTo(0, 0) },
@@ -1611,10 +1652,15 @@ const A = {
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     toast('Sicherung gespeichert');
   },
+  menu: () => S.menu = !S.menu,
+  theme: d => { LS.set('darts.theme', d.v); applyTheme() },
   saveKey: () => { Store.key = $('#appkey').value.trim(); LS.set('darts.key', Store.key); Store.state = 'lokal'; Store.sync().then(() => { render(); toast(Store.state === 'ok' ? 'Verbunden' : Store.state === 'badkey' ? 'Schlüssel stimmt nicht' : 'Keine Verbindung') }) }
 };
 document.addEventListener('click', e => {
-  const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+  const b = e.target.closest('[data-act]');
+  // Menü schließt bei jedem Tipp außerhalb
+  if (S.menu && !e.target.closest('#menu') && !(b && b.dataset.act === 'menu')) { S.menu = false; if (!b) return render() }
+  if (!b || b.disabled) return;
   const f = A[b.dataset.act]; if (!f) return;
   f(b.dataset, b, e); render();
   // Kurzes Aufleuchten am gedrückten Knopf (nach dem Neuzeichnen am gleichen Knopf)
