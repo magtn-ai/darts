@@ -87,6 +87,9 @@ details.extra>*+*{margin-top:10px}
 .pvar .btn{display:flex;flex-direction:column;align-items:center;gap:2px;padding-inline:6px}
 .pvar .btn span{font-size:12px;font-weight:400;color:var(--fog)}
 .gset{display:flex;flex-direction:column;gap:8px}
+.gspec{display:flex;flex-direction:column;gap:2px;min-width:0}
+.gspec b{font-weight:500;color:var(--paper)}
+.gspec span{font-size:12px;color:var(--fog)}
 .gset.main{box-shadow:inset 0 0 0 1px var(--ice)}
 .gcard{display:flex;flex-direction:column;gap:8px}
 .gcard.main{box-shadow:inset 0 0 0 1px var(--ice)}
@@ -333,21 +336,30 @@ const gearLib = () => {
 function saveGearLib(lib) {
   const pid = mainPid(); if (!pid) return;
   const old = gearLib().main; lib.main = lib.sets[0] || {};
-  if (gearSame(gearNow(), old)) setGearNow(clone(lib.main)); // wer heute das alte Main 1 hatte, bekommt das neue
+  if (gearSame(gearNow(), old)) setGearNow(setGear(lib.main)); // wer heute das alte Main 1 hatte, bekommt das neue
   Store.put('profiles', pid, { ...clone(Store.data.profiles[pid]), gear: lib });
 }
 const setName = i => 'Main ' + (i + 1);
+// Ein Set darf einen eigenen Namen tragen; ins Spiel wird nur die Kombination übernommen
+const setTitle = (i, s) => setName(i) + (s && s.name ? ' · ' + s.name : '');
+const setGear = s => { const { name, ...g } = s || {}; return clone(g) };
+// Specs lesbar: Barrel vorne, darunter Spitze, Schaft und Flight
+function gearSpecs(g) {
+  if (!gearHas(g)) return '<span class="muted">ohne Angabe</span>';
+  const rest = [g.point && 'Spitze ' + g.point, (g.shaft || g.length) && 'Schaft ' + [g.shaft, g.length].filter(Boolean).join(' '), g.flight && 'Flight ' + g.flight].filter(Boolean);
+  return `<span class="gspec"><b>${esc(g.barrel || 'Barrel offen')}</b>${rest.length ? `<span>${esc(rest.join(' · '))}</span>` : ''}</span>`;
+}
 const setOf = g => gearLib().sets.findIndex(s => gearHas(s) && gearSame(s, g));
 // Auswahlliste der festen Sets; act bekommt data-i (Index) und data-v (z. B. der Schlüssel eines Eintrags)
 function presetList(g, act, v = '') {
   const sets = gearLib().sets; if (!sets.length) return '';
-  return `<div class="list">${sets.map((s, i) => `<button class="li ${gearSame(s, g) ? 'sel' : ''}" data-act="${act}" data-v="${esc(v)}" data-i="${i}"><span class="cap" style="width:52px">${setName(i)}</span><span class="grow small" style="white-space:normal;overflow:visible">${esc(gearLabel(s))}</span>${gearSame(s, g) ? '<span class="small" style="color:var(--ice)">✓</span>' : ''}</button>`).join('')}</div>`;
+  return `<div class="list">${sets.map((s, i) => `<button class="li ${gearSame(s, g) ? 'sel' : ''}" data-act="${act}" data-v="${esc(v)}" data-i="${i}"><span class="cap" style="width:64px;white-space:normal">${setName(i)}${s.name ? `<br><span style="color:var(--paper)">${esc(s.name)}</span>` : ''}</span><span class="grow" style="white-space:normal;overflow:visible;padding-block:8px">${gearSpecs(s)}</span>${gearSame(s, g) ? '<span class="small" style="color:var(--ice)">✓</span>' : ''}</button>`).join('')}</div>`;
 }
 const gearHas = g => !!g && GEAR.some(([k]) => g[k]);
 const gearLabel = g => gearHas(g) ? GEAR.map(([k]) => g[k]).filter(Boolean).join(' · ') : 'ohne Angabe';
 const gearSame = (a, b) => GEAR.every(([k]) => ((a || {})[k] || '') === ((b || {})[k] || ''));
 // Setup für heutige Spiele und Trainings; am nächsten Tag gilt wieder das Main-Set
-function gearNow() { const s = LS.get('darts.gearnow', null); return s && s.day === new Date().toDateString() ? clone(s.g) : clone(gearLib().main) }
+function gearNow() { const s = LS.get('darts.gearnow', null); return s && s.day === new Date().toDateString() ? clone(s.g) : setGear(gearLib().main) }
 const setGearNow = g => LS.set('darts.gearnow', { day: new Date().toDateString(), g });
 const withGear = () => { const g = gearNow(); return gearHas(g) ? { gear: g } : {} };
 function gearSelects(g, chg, v = '') {
@@ -359,7 +371,7 @@ function gearPick() {
   const lib = gearLib();
   if (!GEAR.some(([k]) => lib[k].length)) return `<section><h3>Dart-Setup</h3><p class="muted small" style="margin:0">Lege in den Einstellungen deine Barrels, Schäfte und Flights an. Dann speichert jedes Spiel und Training, womit du gespielt hast.</p><button class="link" data-act="tab" data-t="settings">Zu den Einstellungen →</button></section>`;
   const g = gearNow(), i = setOf(g);
-  return `<section><details class="extra" ${S.gearOpen ? 'open' : ''}><summary data-act="gearToggle">Dart-Setup: ${i >= 0 ? `<b>${setName(i)}</b> · ` : ''}${esc(gearLabel(g))}${i < 0 && gearHas(g) ? ' <span class="small" style="color:var(--ice)">(individuell)</span>' : ''}</summary>
+  return `<section><details class="extra" ${S.gearOpen ? 'open' : ''}><summary data-act="gearToggle">Dart-Setup: ${i >= 0 ? `<b>${esc(setTitle(i, gearLib().sets[i]))}</b> · ` : ''}${esc(gearLabel(g))}${i < 0 && gearHas(g) ? ' <span class="small" style="color:var(--ice)">(individuell)</span>' : ''}</summary>
     ${presetList(g, 'gearPreset')}
     <details class="extra" ${S.gearSingle ? 'open' : ''}><summary data-act="gearSingleToggle">Einzeln anpassen</summary>${gearSelects(g, 'gearnow')}</details>
     <p class="muted small" style="margin:0">Gilt für heutige Spiele und Trainings. Ab morgen ist wieder Main 1 eingestellt.</p></details></section>`;
@@ -1347,7 +1359,7 @@ function vGear(pid) {
     <div class="seg">${[['all', 'Komplett'], ...GEAR].map(([k, l]) => `<button class="${dim === k ? 'on' : ''}" data-act="gearDim" data-v="${k}">${l}</button>`).join('')}</div>
     ${rows.map(r => { const si = dim === 'all' && r.k !== 'ohne Angabe' ? lib.sets.findIndex(s => gearLabel(s) === r.k) : -1, main = r.k !== 'ohne Angabe' && (dim === 'all' ? si === 0 : r.k === lib.main[dim]);
       const cell = (v, l) => `<div><b>${v}</b><span>${l}</span></div>`;
-      return `<div class="card gcard ${main ? 'main' : ''}"><div class="bar"><span>${si >= 0 ? `<b>${setName(si)}</b> · ` : ''}${esc(r.k)}${main && si < 0 ? ' <span class="cap" style="color:var(--ice)">Main 1</span>' : ''}</span><span class="cap">${r.m} ${r.m === 1 ? 'Spiel' : 'Spiele'} · ${r.l} Liga · ${r.t} ${r.t === 1 ? 'Training' : 'Trainings'}</span></div>
+      return `<div class="card gcard ${main ? 'main' : ''}"><div class="bar"><span>${si >= 0 ? `<b>${esc(setTitle(si, lib.sets[si]))}</b> · ` : ''}${esc(r.k)}${main && si < 0 ? ' <span class="cap" style="color:var(--ice)">Main 1</span>' : ''}</span><span class="cap">${r.m} ${r.m === 1 ? 'Spiel' : 'Spiele'} · ${r.l} Liga · ${r.t} ${r.t === 1 ? 'Training' : 'Trainings'}</span></div>
         <div class="gstat">${cell(fmt(r.ldarts ? r.lpts / r.ldarts * 3 : null, 1), 'Ø Liga')}${cell(fmt(r.darts ? r.pts / r.darts * 3 : null, 1), 'Ø Spiel')}${cell(r.att ? pct(r.hit, r.att) : '–', 'Checkout')}${cell(fmt(avg(r.sc), 1), 'Ø Scoring')}${cell(r.dbl.length ? fmt(avg(r.dbl), 0) + ' %' : '–', 'Doppel')}${cell(r.plan.length ? fmt(avg(r.plan), 0) + ' %' : '–', 'Plan')}</div></div>` }).join('')}
     <p class="muted small" style="margin:0">Ø Liga = dein Einzel-Average an den Liga-Spieltagen. Ø Spiel = 3-Dart-Average in X01 in der App (auch gegen den Bot). Ø Scoring = Scoring-Übung und Power-Scoring aus dem Trainingsplan. Doppel = Doppel-Quote-Übung. Plan = Zielerreichung im Trainingsplan. Blau umrandet ist dein Main 1.</p>
     <details class="extra" ${S.gearListOpen ? 'open' : ''}><summary data-act="gearListToggle">Setup nachtragen (${es.filter(e => !gearHas(e.gear)).length} ohne Angabe)</summary>
@@ -1411,10 +1423,10 @@ function vGearLib() {
   if (!mainPid()) return '';
   const lib = gearLib();
   return `<section><h3>Meine Sets · ${esc(pname(mainPid()))}</h3>
-    ${lib.sets.map((s, i) => `<div class="card gset ${i ? '' : 'main'}"><div class="bar"><span><b>${setName(i)}</b>${i ? '' : ' <span class="cap" style="color:var(--ice)">Standard</span>'}</span>
+    ${lib.sets.map((s, i) => `<div class="card gset ${i ? '' : 'main'}"><div class="bar"><span><b>${esc(setTitle(i, s))}</b>${i ? '' : ' <span class="cap" style="color:var(--ice)">Standard</span>'}</span>
         <span class="row">${i ? `<button class="chip" data-act="setUp" data-i="${i}" aria-label="${setName(i)} nach oben">↑</button>` : ''}<button class="chip ${S.setEdit === i ? 'on' : ''}" data-act="setEdit" data-i="${i}">Bearbeiten</button><button class="chip x" data-act="setDel" data-i="${i}" aria-label="${setName(i)} löschen">${S.setDelAsk === i ? 'Löschen?' : '×'}</button></span></div>
-      <span class="${gearHas(s) ? '' : 'muted'} small">${esc(gearLabel(s))}</span>
-      ${S.setEdit === i ? gearSelects(s, 'gearset', String(i)) : ''}</div>`).join('') || '<p class="muted small" style="margin:0">Noch keine Sets. Stell unten deine Teile zusammen und lege ein Set an.</p>'}
+      ${gearSpecs(s)}
+      ${S.setEdit === i ? `<label class="f">Name (optional)<input type="text" maxlength="30" autocomplete="off" placeholder="z. B. Bolide lang" value="${esc(s.name || '')}" data-chg="setname" data-v="${i}"></label>${gearSelects(s, 'gearset', String(i))}` : ''}</div>`).join('') || '<p class="muted small" style="margin:0">Noch keine Sets. Stell unten deine Teile zusammen und lege ein Set an.</p>'}
     <button class="btn" data-act="setAdd">+ Neues Set</button>
     <p class="muted small" style="margin:0">Ein Set ist eine feste Kombination aus Barrel, Spitzen, Schaft und Flight. Main 1 ist bei jedem Spiel und Training voreingestellt, die anderen wählst du mit einem Tipp aus. Mit ↑ änderst du die Reihenfolge, das oberste wird Main 1. Alte Spiele behalten ihr Setup, auch wenn du ein Set änderst oder löschst.</p></section>
     <section><h3>Baukasten · alle Teile</h3>
@@ -1494,8 +1506,8 @@ const A = {
   setEdit: d => { S.setEdit = S.setEdit === +d.i ? null : +d.i; S.setDelAsk = null },
   setUp: d => { const lib = gearLib(), i = +d.i; [lib.sets[i - 1], lib.sets[i]] = [lib.sets[i], lib.sets[i - 1]]; saveGearLib(lib); S.setEdit = null; S.setDelAsk = null; toast(`Jetzt ${setName(i - 1)}`) },
   setDel: d => { const i = +d.i; if (S.setDelAsk !== i) return S.setDelAsk = i; const lib = gearLib(); lib.sets.splice(i, 1); saveGearLib(lib); S.setDelAsk = null; S.setEdit = null; toast('Set gelöscht') },
-  gearPreset: d => { setGearNow(clone(gearLib().sets[+d.i])); toast(setName(+d.i) + ' eingestellt') },
-  gearApply: d => { setDocGear(d.v, clone(gearLib().sets[+d.i])); toast(setName(+d.i) + ' übernommen') },
+  gearPreset: d => { setGearNow(setGear(gearLib().sets[+d.i])); toast(setName(+d.i) + ' eingestellt') },
+  gearApply: d => { setDocGear(d.v, setGear(gearLib().sets[+d.i])); toast(setName(+d.i) + ' übernommen') },
   gearSingleToggle: (d, b, e) => { e.preventDefault(); S.gearSingle = !S.gearSingle },
   gearToggle: (d, b, e) => { e.preventDefault(); S.gearOpen = !S.gearOpen },
   gearEdit: d => S.gearEdit = S.gearEdit === d.v ? null : d.v,
@@ -1615,6 +1627,7 @@ document.addEventListener('change', e => {
   if (el.dataset.chg === 'myteam') { A.setTeam({ v: el.value }); render() }
   if (el.dataset.chg === 'gearnow') { const g = gearNow(); g[el.dataset.k] = el.value; setGearNow(g); render() }
   if (el.dataset.chg === 'gearset') { const lib = gearLib(), i = +el.dataset.v; lib.sets[i] = { ...lib.sets[i], [el.dataset.k]: el.value }; saveGearLib(lib); render() }
+  if (el.dataset.chg === 'setname') { const lib = gearLib(), i = +el.dataset.v; lib.sets[i] = { ...lib.sets[i], name: el.value.trim() }; if (!lib.sets[i].name) delete lib.sets[i].name; saveGearLib(lib); toast('Name gespeichert'); render() }
   if (el.dataset.chg === 'gearedit') { const g = clone(docGear(el.dataset.v) || {}); g[el.dataset.k] = el.value; setDocGear(el.dataset.v, g); render() }
   if (el.dataset.chg === 'import' && el.files[0]) {
     el.files[0].text().then(t => {
