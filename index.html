@@ -88,7 +88,7 @@ details.extra>*+*{margin-top:10px}
 .pvar .btn span{font-size:12px;font-weight:400;color:var(--fog)}
 .gcard{display:flex;flex-direction:column;gap:8px}
 .gcard.main{box-shadow:inset 0 0 0 1px var(--ice)}
-.gstat{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.gstat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px 4px}
 .gstat div{display:flex;flex-direction:column;min-width:0}
 .gstat b{font-family:var(--f-mono);font-weight:500;font-size:15px;color:var(--paper)}
 .gstat span{font-size:11px;color:var(--fog);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1007,7 +1007,16 @@ function vReport() {
     <div class="bar"><h2 class="grow">${esc(b.heim)} <span class="muted">vs.</span> ${esc(b.gast)}</h2><span class="score" style="font-size:28px">${sp.setsH ?? '–'}:${sp.setsG ?? '–'}</span></div>
     <p class="muted small" style="margin:0">Legs ${sp.legsH ?? '–'}:${sp.legsG ?? '–'}${b.s180 && b.s180 !== 'n/a' ? ' · 180er: ' + esc(b.s180) : ''}${b.hifi && b.hifi !== 'n/a' ? ' · High Finish: ' + esc(b.hifi) : ''}</p>
     <div class="list">${b.sets.map(s => `<div class="set">${side(s, 'heim')}<span class="score">${s.heim.gewonnen}:${s.gast.gewonnen}</span>${side(s, 'gast')}</div>`).join('')}</div>
-    <p class="muted small" style="margin:0">Blau: gewonnenes Leg mit Anzahl Darts. R = Restpunkte im verlorenen Leg.</p></section>`;
+    <p class="muted small" style="margin:0">Blau: gewonnenes Leg mit Anzahl Darts. R = Restpunkte im verlorenen Leg.</p></section>
+    ${vReportGear(b)}`;
+}
+// Eigenes Setup an diesem Spieltag (nur wenn das Hauptprofil mit einem WDV-Spieler verknüpft ist, der hier gespielt hat)
+function vReportGear(b) {
+  const pid = mainPid(), wdv = (Store.data.profiles[pid] || {}).wdv;
+  if (!wdv || !b.sets.some(s => s.heim.spieler.includes(wdv) || s.gast.spieler.includes(wdv))) return '';
+  const key = 'liga:' + b.id, g = docGear(key);
+  return `<section><h3>Dein Setup an diesem Spieltag</h3><div class="card" style="display:flex;flex-direction:column;gap:8px">
+    <span class="${gearHas(g) ? '' : 'muted'}">${esc(gearLabel(g))}</span>${gearSelects(g, 'gearedit', key)}<button class="link" data-act="gearEditMain" data-v="${key}">Main-Set übernehmen</button></div></section>`;
 }
 
 // ---------- Ansichten: Spielen
@@ -1249,10 +1258,31 @@ function vStats() {
     <section><h3>Letzte Spiele</h3><div class="list">${ms.slice(-15).reverse().map(m => { const s = me(m), w = m.players[m.winner] === pid; return `<button class="li" data-act="statMatch" data-v="${m.id}"><span class="cap" style="width:40px">${dShort(m.date)}</span><span class="grow">${m.type === 'x01' ? m.start : 'Cricket'} vs. ${m.players.filter(x => x !== pid).map(x => esc(pname(x))).join(', ') || 'Solo'}</span><span class="pill ${w ? 'w' : 'l'}">${w ? 'S' : 'N'}</span><span class="score">${m.type === 'x01' ? fmt(s.avg, 1) : fmt(s.mpr, 2)}</span></button>` }).join('') || '<div class="li muted">Noch keine Spiele.</div>'}</div></section>
     <section><button class="link" data-act="manage">${S.manage ? 'Bearbeiten schließen' : 'Spieler bearbeiten'}</button>${S.manage ? vManage(pr, pid) : ''}</section>`;
 }
-// Setup nachträglich an einem Spiel oder Training ändern ('matches:ID' bzw. 'trainings:ID')
+// Setup nachträglich ändern: 'matches:ID', 'trainings:ID' oder 'liga:Spielbericht-ID'.
+// Liga-Spieltage sind keine eigenen Dokumente, ihr Setup liegt im Hauptprofil unter ligaGear.
+function docGear(key) {
+  const [c, id] = key.split(':');
+  return c === 'liga' ? ((Store.data.profiles[mainPid()] || {}).ligaGear || {})[id] : (Store.data[c][id] || {}).gear;
+}
 function setDocGear(key, g) {
-  const [c, id] = key.split(':'), doc = Store.data[c][id]; if (!doc) return;
+  const [c, id] = key.split(':');
+  if (c === 'liga') {
+    const pid = mainPid(), pr = clone(Store.data.profiles[pid]), lg = pr.ligaGear || {};
+    if (gearHas(g)) lg[id] = g; else delete lg[id]; pr.ligaGear = lg; return Store.put('profiles', pid, pr);
+  }
+  const doc = Store.data[c][id]; if (!doc) return;
   const o = clone(doc); if (gearHas(g)) o.gear = g; else delete o.gear; Store.put(c, id, o);
+}
+// Liga-Spieltage, an denen der verknüpfte WDV-Spieler im Einzel oder Doppel gespielt hat
+function ligaEntries(pid) {
+  const pr = Store.data.profiles[pid] || {}, wdv = pr.wdv; if (!wdv || !L) return [];
+  const P = L.byName[wdv];
+  return L.berichte.filter(b => b.sets.some(s => s.heim.spieler.includes(wdv) || s.gast.spieler.includes(wdv))).map(b => {
+    const mine = b.sets.find(s => s.heim.spieler.includes(wdv) || s.gast.spieler.includes(wdv)), team = mine.heim.spieler.includes(wdv) ? b.heim : b.gast;
+    const R = P && P.rounds[b.runde];
+    return { key: 'liga:' + b.id, date: pDate(b.datum).getTime(), gear: (pr.ligaGear || {})[b.id], liga: R && R.darts ? R : null,
+      label: `Liga R${b.runde} · ${team === b.heim ? 'vs. ' + b.gast : '@ ' + b.heim}` };
+  });
 }
 // Alles, was ein Setup tragen kann: Spiele des Spielers und seine Trainings
 function gearEntries(pid) {
@@ -1264,16 +1294,17 @@ function gearEntries(pid) {
     key: 'trainings:' + t.id, date: t.date, gear: t.gear, t,
     label: t.mode === 'plan' ? 'Trainingsplan ' + (PVAR[t.variant] || 'komplett') : (TR[t.mode] || { name: t.mode }).name
   }));
-  return [...ms, ...ts].sort((a, b) => b.date - a.date);
+  return [...ms, ...ts, ...ligaEntries(pid)].sort((a, b) => b.date - a.date);
 }
 function vGear(pid) {
   const lib = gearLib(), es = gearEntries(pid);
   if (!GEAR.some(([k]) => lib[k].length) && !es.some(e => gearHas(e.gear))) return `<section><h3>Dart-Setup</h3><p class="muted small" style="margin:0">Lege in den Einstellungen deine Barrels, Schäfte, Schaftlängen und Flights an. Dann siehst du hier, mit welchem Setup du wie spielst, und kannst alte Spiele und Trainings nachtragen.</p><button class="link" data-act="tab" data-t="settings">Zu den Einstellungen →</button></section>`;
   const dim = S.gearDim || 'all', keyOf = g => dim === 'all' ? gearLabel(g) : (g && g[dim]) || 'ohne Angabe';
   const G = {};
-  const grp = k => G[k] || (G[k] = { k, m: 0, pts: 0, darts: 0, att: 0, hit: 0, t: 0, sc: [], dbl: [], plan: [] });
+  const grp = k => G[k] || (G[k] = { k, m: 0, pts: 0, darts: 0, att: 0, hit: 0, t: 0, sc: [], dbl: [], plan: [], l: 0, lpts: 0, ldarts: 0 });
   es.forEach(e => {
     const r = grp(keyOf(e.gear));
+    if (e.key.startsWith('liga:')) { r.l++; if (e.liga) { r.lpts += e.liga.pts; r.ldarts += e.liga.darts } return }
     if (e.x01) { r.m++; r.pts += e.x01.pts || 0; r.darts += e.x01.darts || 0; r.att += e.x01.att || 0; r.hit += e.x01.hit || 0 }
     else if (e.key.startsWith('matches:')) r.m++;
     if (e.t) {
@@ -1284,15 +1315,18 @@ function vGear(pid) {
     }
   });
   const avg = l => l.length ? l.reduce((a, b) => a + b, 0) / l.length : null;
-  const rows = Object.values(G).sort((a, b) => (a.k === 'ohne Angabe') - (b.k === 'ohne Angabe') || (b.m + b.t) - (a.m + a.t));
-  const ed = S.gearEdit;
-  return `<section><h3>Dart-Setup im Vergleich</h3>
+  const rows = Object.values(G).sort((a, b) => (a.k === 'ohne Angabe') - (b.k === 'ohne Angabe') || (b.m + b.t + b.l) - (a.m + a.t + a.l));
+  const ed = S.gearEdit, pr = Store.data.profiles[pid] || {};
+  const opts = L ? L.players.filter(p => p.team === S.team).sort((a, b) => a.name.localeCompare(b.name, 'de')) : [];
+  const link = pr.wdv ? '' : `<div class="card" style="display:flex;flex-direction:column;gap:8px"><span>Liga-Spieltage einbeziehen</span><span class="muted small">Wähle deinen Namen aus der WDV-Liste, dann erscheinen deine Spieltage unten zum Nachtragen und im Vergleich als „Ø Liga“.</span>
+    <select data-chg="wdvlink" data-v="${pid}"><option value="">– Spieler wählen –</option>${opts.map(p => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('')}</select></div>`;
+  return `<section><h3>Dart-Setup im Vergleich</h3>${link}
     <div class="seg">${[['all', 'Komplett'], ...GEAR].map(([k, l]) => `<button class="${dim === k ? 'on' : ''}" data-act="gearDim" data-v="${k}">${l}</button>`).join('')}</div>
     ${rows.map(r => { const main = r.k !== 'ohne Angabe' && (dim === 'all' ? r.k === gearLabel(lib.main) : r.k === lib.main[dim]);
       const cell = (v, l) => `<div><b>${v}</b><span>${l}</span></div>`;
-      return `<div class="card gcard ${main ? 'main' : ''}"><div class="bar"><span>${esc(r.k)}${main ? ' <span class="cap" style="color:var(--ice)">Main-Set</span>' : ''}</span><span class="cap">${r.m} ${r.m === 1 ? 'Spiel' : 'Spiele'} · ${r.t} ${r.t === 1 ? 'Training' : 'Trainings'}</span></div>
-        <div class="gstat">${cell(fmt(r.darts ? r.pts / r.darts * 3 : null, 1), 'Ø Spiel')}${cell(r.att ? pct(r.hit, r.att) : '–', 'Checkout')}${cell(fmt(avg(r.sc), 1), 'Ø Scoring')}${cell(r.dbl.length ? fmt(avg(r.dbl), 0) + ' %' : '–', 'Doppel')}${cell(r.plan.length ? fmt(avg(r.plan), 0) + ' %' : '–', 'Plan')}</div></div>` }).join('')}
-    <p class="muted small" style="margin:0">Ø Spiel = 3-Dart-Average in X01. Ø Scoring = Scoring-Übung und Power-Scoring aus dem Trainingsplan. Doppel = Doppel-Quote-Übung. Plan = Zielerreichung im Trainingsplan. Markiert ist dein Main-Set.</p>
+      return `<div class="card gcard ${main ? 'main' : ''}"><div class="bar"><span>${esc(r.k)}${main ? ' <span class="cap" style="color:var(--ice)">Main-Set</span>' : ''}</span><span class="cap">${r.m} ${r.m === 1 ? 'Spiel' : 'Spiele'} · ${r.l} Liga · ${r.t} ${r.t === 1 ? 'Training' : 'Trainings'}</span></div>
+        <div class="gstat">${cell(fmt(r.ldarts ? r.lpts / r.ldarts * 3 : null, 1), 'Ø Liga')}${cell(fmt(r.darts ? r.pts / r.darts * 3 : null, 1), 'Ø Spiel')}${cell(r.att ? pct(r.hit, r.att) : '–', 'Checkout')}${cell(fmt(avg(r.sc), 1), 'Ø Scoring')}${cell(r.dbl.length ? fmt(avg(r.dbl), 0) + ' %' : '–', 'Doppel')}${cell(r.plan.length ? fmt(avg(r.plan), 0) + ' %' : '–', 'Plan')}</div></div>` }).join('')}
+    <p class="muted small" style="margin:0">Ø Liga = dein Einzel-Average an den Liga-Spieltagen. Ø Spiel = 3-Dart-Average in X01 in der App (auch gegen den Bot). Ø Scoring = Scoring-Übung und Power-Scoring aus dem Trainingsplan. Doppel = Doppel-Quote-Übung. Plan = Zielerreichung im Trainingsplan. Markiert ist dein Main-Set.</p>
     <details class="extra" ${S.gearListOpen ? 'open' : ''}><summary data-act="gearListToggle">Setup nachtragen (${es.filter(e => !gearHas(e.gear)).length} ohne Angabe)</summary>
       <div class="list">${es.slice(0, 40).map(e => `<button class="li ${ed === e.key ? 'sel' : ''}" data-act="gearEdit" data-v="${e.key}"><span class="cap" style="width:40px">${dShort(e.date)}</span><span class="grow two">${esc(e.label)}<br><span class="${gearHas(e.gear) ? 'muted' : ''} small" style="${gearHas(e.gear) ? '' : 'color:var(--ice)'}">${esc(gearLabel(e.gear))}</span></span></button>
         ${ed === e.key ? `<div class="card" style="display:flex;flex-direction:column;gap:8px">${gearSelects(e.gear, 'gearedit', e.key)}<button class="link" data-act="gearEditMain" data-v="${e.key}">Main-Set übernehmen</button></div>` : ''}`).join('')}</div>
@@ -1547,7 +1581,7 @@ document.addEventListener('change', e => {
   if (el.dataset.chg === 'myteam') { A.setTeam({ v: el.value }); render() }
   if (el.dataset.chg === 'gearnow') { const g = gearNow(); g[el.dataset.k] = el.value; setGearNow(g); render() }
   if (el.dataset.chg === 'gearmain') { const lib = gearLib(), was = gearSame(gearNow(), lib.main); lib.main = { ...lib.main, [el.dataset.k]: el.value }; if (was) setGearNow(clone(lib.main)); saveGearLib(lib); toast('Main-Set gespeichert'); render() }
-  if (el.dataset.chg === 'gearedit') { const [c, id] = el.dataset.v.split(':'), g = clone((Store.data[c][id] || {}).gear || {}); g[el.dataset.k] = el.value; setDocGear(el.dataset.v, g); render() }
+  if (el.dataset.chg === 'gearedit') { const g = clone(docGear(el.dataset.v) || {}); g[el.dataset.k] = el.value; setDocGear(el.dataset.v, g); render() }
   if (el.dataset.chg === 'import' && el.files[0]) {
     el.files[0].text().then(t => {
       const d = JSON.parse(t); if (d.app !== 'dirty-checkers-darts') throw 0;
