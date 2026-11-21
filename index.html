@@ -400,10 +400,15 @@ function gearSelects(g, chg, v = '') {
   return `<div class="gsel">${GEAR.map(([k, l]) => `<label class="f">${l}<select data-chg="${chg}" data-k="${k}" data-v="${esc(v)}"><option value="">–</option>${lib[k].map(x => `<option ${g && g[k] === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}${g && g[k] && !lib[k].includes(g[k]) ? `<option selected>${esc(g[k])}</option>` : ''}</select></label>`).join('')}</div>`;
 }
 // Auswahl vor Spiel/Training
-function gearPick() {
+function gearPick(open) {
   const lib = gearLib();
   if (!GEAR.some(([k]) => lib[k].length)) return `<section><h3>Dart-Setup</h3><p class="muted small" style="margin:0">Lege unter Zahnrad → Dart-Setup deine Barrels, Schäfte und Flights an. Dann speichert jedes Spiel und Training, womit du gespielt hast.</p><button class="link" data-act="tab" data-t="setup">Zum Dart-Setup →</button></section>`;
   const g = gearNow(), i = setOf(g);
+  // Training: Auswahl gleich offen zeigen, damit vor dem Start klar ist, mit welchem Set es zählt
+  if (open) return `<section><h3>Mit welchem Set trainierst du?</h3>
+    ${presetList(g, 'gearPreset')}${i < 0 ? `<p class="small" style="margin:0">Gerade eingestellt: ${esc(gearLabel(g))} <span style="color:var(--ice)">(individuell)</span></p>` : ''}
+    <details class="extra" ${S.gearSingle || !lib.sets.length ? 'open' : ''}><summary data-act="gearSingleToggle">Einzeln anpassen</summary>${gearSelects(g, 'gearnow')}</details>
+    <p class="muted small" style="margin:0">Das gewählte Set wird bei Trainingsplan, Übungen und Bot-Spiel gespeichert und gilt heute auch für deine Spiele. Ab morgen ist wieder Main 1 eingestellt.</p></section>`;
   return `<section><details class="extra" ${S.gearOpen ? 'open' : ''}><summary data-act="gearToggle">Dart-Setup: ${i >= 0 ? `<b>${esc(setTitle(i, gearLib().sets[i]))}</b> · ` : ''}${esc(gearLabel(g))}${i < 0 && gearHas(g) ? ' <span class="small" style="color:var(--ice)">(individuell)</span>' : ''}</summary>
     ${presetList(g, 'gearPreset')}
     <details class="extra" ${S.gearSingle ? 'open' : ''}><summary data-act="gearSingleToggle">Einzeln anpassen</summary>${gearSelects(g, 'gearnow')}</details>
@@ -1272,7 +1277,7 @@ function vTraining() {
   const medNames = PLAN.every(g => g.medium || g.id === 'bo11') ? 'alle Spiele außer Best of 11' : PLAN.filter(g => g.medium).map(g => g.name).join(', ');
   const durV = (v, est) => { const d = S.trPid && planAvgDur(S.trPid, v); return d ? 'Ø ' + durFmt(d.ms) : est };
   return `<section><h2>Training${S.trPid ? ' · ' + esc(pname(S.trPid)) : ''}</h2>${S.trPid ? '' : '<p class="muted small" style="margin:0">Lege zuerst unter „Spielen“ deinen Spieler an.</p>'}</section>
-    ${S.trPid ? gearPick() : ''}
+    ${S.trPid ? gearPick(true) : ''}
     <section><h3>Trainingsplan</h3>
       <div class="pvar">${[['voll', 'Komplett', 'ca. 2 h'], ['medium', 'Medium', 'ca. 1 h'], ['kurz', 'Kurz', 'ca. 25 min']].map(([v, l, est], i) => `<button class="btn ${i ? '' : 'primary'} big" data-act="planStart" data-v="${v}" ${S.trPid ? '' : 'disabled'}>${l}<span>${durV(v, est)}</span></button>`).join('')}</div>
       <p class="muted small" style="margin:0">Komplett: 10 Minuten Warm-Up und alle 10 Spiele. Medium: 5 Minuten Warm-Up, dann ${esc(medNames)} mit etwa halb so vielen Runden. Kurz: 3 Minuten Warm-Up, dann ${esc(kurzNames)} mit noch weniger Runden. Alle drei fließen in dieselbe Statistik, gekürzte Spiele werden auf die volle Rundenzahl hochgerechnet.</p>
