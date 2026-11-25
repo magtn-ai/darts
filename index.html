@@ -235,8 +235,17 @@ body.live .btn{padding-block:8px}
 .quick button{border:1px solid var(--iron);background:transparent;border-radius:var(--r-sm);height:36px;font-family:var(--f-mono);font-size:14px}
 .bar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .tbig{font-family:var(--f-mono);font-size:64px;font-weight:500;line-height:1;text-align:center;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
-.tbtns{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
-.tbtns button{height:64px;font-size:16px;font-weight:500;border-radius:var(--r-sm);border:1px solid var(--iron);background:var(--charcoal)}
+.tbtns{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:4px}
+.tbtns:has(> :nth-child(3):last-child){grid-template-columns:repeat(3,1fr)}
+.tbtns:has(> :nth-child(4)){grid-template-columns:repeat(4,1fr)}
+.tbtns button{min-height:76px;padding:8px 4px;font-size:16px;font-weight:500;border-radius:var(--r-sm);border:1px solid var(--iron);background:var(--charcoal);touch-action:manipulation;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;line-height:1.2}
+.tbtns button b{font-family:var(--f-mono);font-size:30px;font-weight:500;line-height:1}
+.tbtns button span{font-size:11px;color:var(--fog);text-align:center}
+.tbtns .hit span{color:inherit;opacity:.8}
+.tfoot{display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:8px}
+.tfoot .btn{width:100%}
+.tfoot .link{align-self:center;padding:6px 0}
+.link.warn{color:var(--neg)}
 .tbtns .hit{border-color:var(--ice);color:var(--ice);background:var(--ice-08)}
 .tbtns .miss{background:var(--graphite);color:var(--fog)}
 .tbtns button:active,.quick button:active,.btn:active{background:var(--slate)}
@@ -786,7 +795,7 @@ const PLAN = [
   { id: 'power', name: 'Power-Scoring', rule: 'Aufnahmen auf Punkte. Der Average (aufgerundet) ist die Punktzahl.', rounds: 34, medium: 20, short: 10, goal: 67, input: 'visit' }, // persönliches Ziel (Original-Plan: 90)
   { id: 'co2', name: 'Check-Outs II', rule: '3 Darts pro Zahl, von 81 aufwärts, immer +1. Check-Out = 1 Punkt.', rounds: 40, medium: 20, short: 0, goal: 10, input: 'co', target: n => 81 + n },
   { id: 'co25', name: '25 Check-Out', rule: '3 Darts, um Rest 25 zu checken. Check-Out = 1 Punkt.', rounds: 20, medium: 15, short: 10, goal: 10, input: 'co', target: () => 25 },
-  { id: 'switch', name: 'Switch', rule: 'Je ein Dart auf T20, T19, T18. Jedes Triple = 1 Punkt. Ein Ausreißer macht die Runde zu 0.', rounds: 20, medium: 15, short: 10, goal: 10, input: 'switch', target: () => 'T20 · T19 · T18' },
+  { id: 'switch', name: 'Switch', rule: 'Je ein Dart auf T20, T19, T18. Jedes Triple = 1 Punkt. Ein Ausreißer (Dart neben dem Zielsegment) pro Runde ist erlaubt, ab zwei Ausreißern zählt die Runde 0.', rounds: 20, medium: 15, short: 10, goal: 10, input: 'switch', target: () => 'T20 · T19 · T18' },
   { id: 'd40', name: '40', rule: '40 / 20 / 10. Pro getroffenem Doppel 1 Punkt.', rounds: 20, medium: 15, short: 10, goal: 20, input: 'count', target: () => '40' },
   { id: 'd32', name: '32', rule: '32 / 16 / 8. Pro getroffenem Doppel 1 Punkt.', rounds: 20, medium: 10, short: 0, goal: 20, input: 'count', target: () => '32' },
   { id: 'd24', name: '24', rule: '24 / 12 / 6. Pro getroffenem Doppel 1 Punkt.', rounds: 20, medium: 10, short: 0, goal: 20, input: 'count', target: () => '24' },
@@ -1008,6 +1017,80 @@ function vLineup(team, next) {
         <div class="mu-row">${side(a, false)}${ou ? `<span class="mu-vs">vs.</span>${side(b, true)}` : ''}</div></div>` }).join('')}</div>
     <p class="muted small" style="margin:0">Rein statistisch aus den letzten Spielberichten (${esc(team)}: ${lu.n}${ou ? `, ${esc(opp)}: ${ou.n}` : ''}), neuere zählen mehr. Die Prozentzahl je Spieler sagt, wie sicher der Platz zuletzt so besetzt war. Die Paarung ist beides zusammen: wie wahrscheinlich genau diese zwei gegeneinander spielen. Ø = Liga-Average.</p></section>`;
 }
+// ---------- Aufstellungs-Helfer
+// Leg-Chance aus der Average-Differenz, geeicht an allen Sets der Liga (Einzel Skala 7,5, Doppel 5,5 Punkte).
+// Bei wenigen Legs wird der Average Richtung Ligaschnitt gezogen (Gewicht 8 Legs); wer nur Doppel spielt, gilt als etwas unter dem Schnitt.
+const LU_K = 8, LU_SC = { einzel: 7.5, doppel: 5.5 };
+const LU_SETS = [[1, 'einzel'], [2, 'einzel'], [3, 'doppel'], [4, 'doppel'], [5, 'einzel'], [6, 'einzel'], [7, 'doppel'], [8, 'doppel']];
+function luStrength() {
+  const ps = L.players.filter(p => p.darts), mean = ps.reduce((a, p) => a + p.pts, 0) / ps.reduce((a, p) => a + p.darts, 0) * 3;
+  const one = n => { const p = L.byName[n]; return p && p.legs && p.avg != null ? (p.legs * p.avg + LU_K * mean) / (p.legs + LU_K) : mean - 4 };
+  return who => who ? who.split(' / ').reduce((a, n) => a + one(n), 0) / who.split(' / ').length : mean;
+}
+const setWin = (a, b, typ) => { const p = 1 / (1 + Math.exp(-(a - b) / LU_SC[typ])), q = 1 - p; return typ === 'einzel' ? p ** 3 * (1 + 3 * q + 6 * q * q) : p * p * (1 + 2 * q) };
+// Chance je Set gegen die wahrscheinlichen Gegner dieses Sets (gewichtet wie in der Prognose)
+function luEval(picks, ou, st) {
+  const sets = LU_SETS.map(([nr, typ]) => {
+    const who = picks[nr] || null, os = ou && ou.slots.find(x => x.nr === nr);
+    const opts = os ? Object.entries(os.w) : [[null, 1]], tw = opts.reduce((a, o) => a + o[1], 0);
+    const p = who ? opts.reduce((a, [o, w]) => a + w / tw * setWin(st(who), st(o), typ), 0) : 0;
+    return { nr, typ, who, p, opp: os && os.pick, oppPct: os && os.pct };
+  });
+  let d = [1]; sets.forEach(x => { const n = Array(d.length + 1).fill(0); d.forEach((v, k) => { n[k] += v * (1 - x.p); n[k + 1] += v * x.p }); d = n });
+  const win = d.slice(5).reduce((a, b) => a + b, 0), draw = d[4] || 0;
+  return { sets, win, draw, loss: 1 - win - draw, exp: sets.reduce((a, x) => a + x.p, 0) };
+}
+// Beste Aufstellung aus den verfügbaren Spielern: im Einzel jeder höchstens einmal, in jedem Doppel-Block (3+4, 7+8) auch.
+function luPlan(sel, ou) {
+  const st = luStrength(), picks = {}, chance = (who, nr) => luEval({ [nr]: who }, ou, st).sets.find(x => x.nr === nr).p;
+  const sNr = LU_SETS.filter(x => x[1] === 'einzel').map(x => x[0]);
+  let best = null;
+  const goS = (i, used, sum, acc) => {
+    if (i === sNr.length) { if (!best || sum > best.sum) best = { sum, acc }; return }
+    const c = sel.filter(n => !used.includes(n)); if (!c.length) return goS(i + 1, used, sum, [...acc, null]);
+    c.forEach(n => goS(i + 1, [...used, n], sum + chance(n, sNr[i]), [...acc, n]));
+  };
+  goS(0, [], 0, []); sNr.forEach((nr, i) => picks[nr] = best.acc[i]);
+  const pairs = sel.flatMap((a, i) => sel.slice(i + 1).map(b => [a, b].sort((x, y) => x.localeCompare(y, 'de')).join(' / ')));
+  [[3, 4], [7, 8]].forEach(bl => {
+    let bb = null;
+    const go = (i, used, sum, acc) => {
+      if (i === bl.length) { if (!bb || sum > bb.sum) bb = { sum, acc }; return }
+      const c = pairs.filter(p => !p.split(' / ').some(n => used.includes(n))); if (!c.length) return go(i + 1, used, sum, [...acc, null]);
+      c.forEach(p => go(i + 1, [...used, ...p.split(' / ')], sum + chance(p, bl[i]), [...acc, p]));
+    };
+    go(0, [], 0, []); bl.forEach((nr, i) => picks[nr] = bb.acc[i]);
+  });
+  return luEval(picks, ou, st);
+}
+function vPlanner(team, next) {
+  const opp = next.heim === team ? next.gast : next.heim, ou = lineup(opp), lu = lineup(team);
+  const av = LS.get('darts.avail', null), sel = av && av.runde === next.runde ? av.names : [];
+  const me = (Store.data.profiles[mainPid()] || {}).wdv, st = luStrength();
+  const nm = p => p ? esc(p).split(' / ').map(x => x === me ? `<b style="color:var(--ice)">${x}</b>` : x).join(' / ') : '<span class="muted">niemand frei</span>';
+  const pc = p => Math.round(p * 100) + ' %';
+  const tone = p => p >= .6 ? 'var(--ice)' : p < .4 ? 'var(--neg)' : 'var(--paper)';
+  const chips = teamPlayers(team).map(p => `<button class="chip ${sel.includes(p.name) ? 'on' : ''}" data-act="availToggle" data-v="${esc(p.name)}" data-r="${next.runde}">${esc(p.name)}${p.avg != null ? ` <span class="muted small">${fmt(p.avg, 1)}</span>` : ''}</button>`).join('');
+  let out = '';
+  if (sel.length < 4) out = `<p class="muted small" style="margin:0">Tippe an, wer am ${esc(next.datum)} spielen kann. Ab 4 Spielern kommt der Vorschlag.</p>`;
+  else {
+    const r = luPlan(sel, ou);
+    // Vergleich mit der Aufstellung, die ihr zuletzt meistens gespielt habt, falls alle davon können
+    const usual = {}; (lu ? lu.slots : []).forEach(x => usual[x.nr] = x.pick);
+    const canUsual = lu && Object.values(usual).every(w => w && w.split(' / ').every(n => sel.includes(n)));
+    const base = canUsual ? luEval(usual, ou, st) : null, diff = base ? Math.round((r.win + r.draw / 2 - base.win - base.draw / 2) * 100) : 0;
+    const bench = sel.filter(n => !r.sets.some(x => x.who && x.who.split(' / ').includes(n)));
+    out = `<div class="kpis"><div class="kpi"><b style="color:var(--ice)">${pc(r.win)}</b><span>Sieg</span></div><div class="kpi"><b>${pc(r.draw)}</b><span>Unentschieden</span></div><div class="kpi"><b>${pc(r.loss)}</b><span>Niederlage</span></div></div>
+      <p class="muted small" style="margin:0">Erwartet etwa <span class="mono" style="color:var(--paper)">${fmt(r.exp, 1)} : ${fmt(8 - r.exp, 1)}</span> Sets.${base ? (Math.abs(diff) >= 1 ? ` Gegenüber eurer üblichen Aufstellung ${diff > 0 ? '+' : ''}${diff} Prozentpunkte bei den erwarteten Matchpunkten.` : ' Das entspricht ungefähr eurer üblichen Aufstellung.') : ''}${bench.length ? ` Nicht eingeplant: ${bench.map(esc).join(', ')}.` : ''}</p>
+      <div class="list">${r.sets.map(x => `<div class="li mu"><span class="cap mu-n">Set ${x.nr} · ${x.typ === 'einzel' ? 'Einzel' : 'Doppel'} · <span style="color:${tone(x.p)}">${pc(x.p)} Siegchance</span></span>
+        <div class="mu-row"><div class="mu-p"><span>${nm(x.who)}</span>${x.who ? `<span class="cap">Stärke ${fmt(st(x.who), 1)}</span>` : ''}</div><span class="mu-vs">vs.</span>
+        <div class="mu-p r">${x.opp ? `<span>${esc(x.opp)}</span><span class="cap">${x.oppPct} % sicher</span>` : '<span class="muted">unbekannt</span>'}</div></div></div>`).join('')}</div>`;
+  }
+  return `<section><h3>Aufstellung planen · gegen ${esc(opp)}</h3>
+    <div class="row">${chips}</div>${sel.length ? `<button class="link" data-act="availClear" data-r="${next.runde}">Auswahl leeren</button>` : ''}
+    ${out}
+    <p class="muted small" style="margin:0">Der Vorschlag rechnet mit dem Liga-Ø aus den Einzeln. Wer erst wenige Legs hat, wird Richtung Ligaschnitt gezogen, im Doppel zählt der Schnitt beider Spieler. Die Gegner kommen aus ihrer voraussichtlichen Aufstellung, die Formel ist an allen bisherigen Sets der Liga geeicht. Tagesform, Eingespieltheit im Doppel und wer gern gegen wen spielt, kennt sie nicht. Stärke = Ø nach dieser Korrektur.</p></section>`;
+}
 function vTeam(team) {
   const row = teamRow(team) || {}, info = teamInfo(team), today = new Date(); today.setHours(0, 0, 0, 0);
   const games = L.spiele.filter(s => s.heim === team || s.gast === team);
@@ -1036,7 +1119,7 @@ function vTeam(team) {
     ${rounds.length ? `<section><h3>Ø pro Spieltag</h3><div class="tbl heat"><table><thead><tr><th>Spieler</th>${rounds.map(r => `<th class="c">R${r}</th>`).join('')}</tr></thead><tbody>
       ${players.map(p => `<tr><td>${esc(p.name)}</td>${rounds.map(r => { const R = p.rounds[r]; return `<td class="v ${heatCls(R && R.avg)}">${R ? fmt(R.avg, 1) : ''}</td>` }).join('')}</tr>`).join('')}
     </tbody></table></div><p class="muted small" style="margin:0">Blau ab Ø 48, hellblau ab 40, rot darunter. Leer = kein Einzel gespielt.</p></section>` : ''}
-    ${vLineup(team, next)}`;
+    ${vLineup(team, next)}${team === S.team && next ? vPlanner(team, next) : ''}`;
 }
 function vTabelle() {
   return `<section><h2>Tabelle</h2><div class="tbl"><table><thead><tr><th class="c">#</th><th>Mannschaft</th><th class="c">Sp</th><th class="c">S-U-N</th><th class="c">Legs</th><th class="r">Sets</th></tr></thead><tbody>
@@ -1230,19 +1313,21 @@ function vPlan() {
       <div class="entry">${S.entry || '<span class="muted">0</span>'}</div>
       <div class="quick">${[26, 41, 45, 60, 81, 85, 95, 100, 140, 180].map(v => `<button data-act="planQuick" data-v="${v}">${v}</button>`).join('')}</div>
       <div class="pad np">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(k => `<button data-act="key" data-v="${k}">${k}</button>`).join('')}<button class="act" data-act="key" data-v="del">⌫</button><button data-act="key" data-v="0">0</button><button class="ok" data-act="planOk">OK</button></div>
-      <div class="row"><button class="btn grow" data-act="planUndo" ${n ? '' : 'disabled'}>↶ Zurück</button><button class="btn grow" data-act="planSkip">Überspringen</button></div></section>`;
+      ${planFoot(n)}</section>`;
   }
   big = g.target(n);
-  if (g.input === 'count') btns = [0, 1, 2, 3].map(v => `<button class="${v ? 'hit' : 'miss'}" data-act="planIn" data-v="${v}">${v}</button>`).join('');
+  if (g.input === 'count') btns = [0, 1, 2, 3].map(v => `<button class="${v ? 'hit' : 'miss'}" data-act="planIn" data-v="${v}"><b>${v}</b><span>Treffer</span></button>`).join('');
   if (g.input === 'co') btns = `<button class="hit" data-act="planIn" data-v="1">Gecheckt</button><button class="miss" data-act="planIn" data-v="0">Nicht gecheckt</button>`;
-  if (g.input === 'switch') btns = [1, 2, 3].map(v => `<button class="hit" data-act="planIn" data-v="${v}">${v} Triple</button>`).join('') + `<button class="miss" data-act="planIn" data-v="0">0 / Ausreißer</button>`;
+  if (g.input === 'switch') btns = [0, 1, 2, 3].map(v => `<button class="${v ? 'hit' : 'miss'}" data-act="planIn" data-v="${v}"><b>${v}</b><span>${v ? 'Triple' : 'kein Triple / 2 Ausreißer'}</span></button>`).join('');
   return `<section>${head}<h2>${esc(g.name)}</h2><p class="muted" style="margin:0">${esc(g.rule)}</p>
     <p class="cap" style="margin:0;text-align:center">Runde ${n + 1} von ${N}</p><div class="tbig" style="font-size:${String(big).length > 6 ? 36 : 64}px">${esc(big)}</div>
     ${g.input === 'co' && bestOut(+big) ? `<p class="mono" style="text-align:center;margin:0;color:var(--ice)">${bestOut(+big).map(dLabel).join(' · ')}</p>` : ''}
-    <p class="muted" style="text-align:center;margin:0"><span class="mono" style="color:var(--paper)">${sum}</span> Punkte · Ziel ${goalNow}</p>
+    <p class="muted" style="text-align:center;margin:0"><span class="mono" style="color:var(--paper)">${sum}</span> Punkte · Ziel ${goalNow}${n ? ` · zuletzt <span class="mono" style="color:var(--paper)">${g.input === 'co' ? (p.cur[n - 1] ? 'gecheckt' : 'nicht gecheckt') : p.cur[n - 1]}</span>` : ''}</p>
     <div class="tbtns">${btns}</div>
-    <div class="row"><button class="btn grow" data-act="planUndo" ${n ? '' : 'disabled'}>↶ Zurück</button><button class="btn grow" data-act="planSkip">Überspringen</button></div></section>`;
+    ${planFoot(n)}</section>`;
 }
+// Zurück groß, Überspringen klein und mit Rückfrage, damit kein Spiel aus Versehen verloren geht
+const planFoot = n => `<div class="tfoot"><button class="btn" data-act="planUndo" ${n ? '' : 'disabled'}>↶ Letzte Eingabe zurück</button><button class="link ${S.skipAsk ? 'warn' : ''}" data-act="planSkip">${S.skipAsk ? (n ? 'Wirklich überspringen? ' + n + (n === 1 ? ' Runde geht' : ' Runden gehen') + ' verloren' : 'Wirklich überspringen?') : 'Spiel überspringen'}</button></div>`;
 function vTraining() {
   if (S.plan) return vPlan();
   const t = S.tr;
@@ -1258,22 +1343,22 @@ function vTraining() {
     }
     const st = t.st; let info = '', btns = '';
     if (t.mode === 'atc') { info = `${st.darts} Darts · ${st.hits} Treffer`; btns = `<button class="hit" data-act="trIn" data-v="hit">Treffer</button><button class="miss" data-act="trIn" data-v="miss">Daneben</button>` }
-    if (t.mode === 'bobs') { info = `Punkte <span class="mono" style="color:var(--paper)">${st.score}</span> · Doppel ${st.i + 1} von 21`; btns = [0, 1, 2, 3].map(n => `<button class="${n ? 'hit' : 'miss'}" data-act="trIn" data-v="${n}">${n} Treffer</button>`).join('') }
+    if (t.mode === 'bobs') { info = `Punkte <span class="mono" style="color:var(--paper)">${st.score}</span> · Doppel ${st.i + 1} von 21`; btns = [0, 1, 2, 3].map(n => `<button class="${n ? 'hit' : 'miss'}" data-act="trIn" data-v="${n}"><b>${n}</b><span>Treffer</span></button>`).join('') }
     if (t.mode === 'c121') { info = `Versuch ${st.n + 1} von 10 · ${st.succ} geschafft · 9 Darts`; btns = `<button class="hit" data-act="trIn" data-v="hit">Gecheckt</button><button class="miss" data-act="trIn" data-v="miss">Nicht gecheckt</button>` }
     if (t.mode === 'dbl') { info = `Dart ${st.darts + 1} von 30 · ${st.hits} Treffer (${pct(st.hits, st.darts)})`; btns = `<button class="hit" data-act="trIn" data-v="hit">Treffer</button><button class="miss" data-act="trIn" data-v="miss">Daneben</button>` }
     if (t.mode === 'treble') { info = `Dart ${st.darts + 1} von 30 · ${st.pts} Punkte · ${st.T} Triple`; btns = `<button class="hit" data-act="trIn" data-v="T">Triple</button><button data-act="trIn" data-v="D">Double</button><button data-act="trIn" data-v="S">Single</button><button class="miss" data-act="trIn" data-v="M">Daneben</button>` }
     if (t.mode === 'scoring') {
       const n = st.visits.length, avg = n ? st.visits.reduce((a, b) => a + b, 0) / n : null;
-      return `<section><div class="bar"><span class="cap">${esc(def.name)} · ${esc(pname(t.pid))}</span><button class="chip" data-act="trAbort">Abbrechen</button></div>
+      return `<section><div class="bar"><span class="cap">${esc(def.name)} · ${esc(pname(t.pid))}</span><button class="chip ${S.abortAsk ? 'danger' : ''}" data-act="trAbort">${S.abortAsk ? 'Wirklich abbrechen?' : 'Abbrechen'}</button></div>
         <div class="tbig">${fmt(avg, 1)}</div><p class="cap" style="text-align:center;margin:0">Ø nach ${n} von ${t.variant} Aufnahmen${n ? ' · zuletzt ' + st.visits[n - 1] : ''}</p>
         <div class="entry">${S.entry || '<span class="muted">0</span>'}</div>
         <div class="quick">${[26, 41, 45, 60, 81, 85, 95, 100, 140, 180].map(v => `<button data-act="trQuick" data-v="${v}">${v}</button>`).join('')}</div>
         <div class="pad np">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(k => `<button data-act="key" data-v="${k}">${k}</button>`).join('')}<button class="act" data-act="key" data-v="del">⌫</button><button data-act="key" data-v="0">0</button><button class="ok" data-act="trOk">OK</button></div>
         <button class="btn block" data-act="trUndo">↶ Zurück</button></section>`;
     }
-    return `<section><div class="bar"><span class="cap">${esc(def.name)} · ${esc(pname(t.pid))}</span><button class="chip" data-act="trAbort">Abbrechen</button></div>
+    return `<section><div class="bar"><span class="cap">${esc(def.name)} · ${esc(pname(t.pid))}</span><button class="chip ${S.abortAsk ? 'danger' : ''}" data-act="trAbort">${S.abortAsk ? 'Wirklich abbrechen?' : 'Abbrechen'}</button></div>
       <p class="cap" style="margin:0;text-align:center">Ziel</p><div class="tbig">${esc(trTarget(t))}</div><p class="muted" style="text-align:center;margin:0">${info}</p>
-      <div class="tbtns">${btns}</div><button class="btn block" data-act="trUndo" ${t.log.length ? '' : 'disabled'}>↶ Zurück</button></section>`;
+      <div class="tbtns">${btns}</div><div class="tfoot"><button class="btn" data-act="trUndo" ${t.log.length ? '' : 'disabled'}>↶ Letzte Eingabe zurück</button></div></section>`;
   }
   const def = TR[S.trSel], ps = profiles();
   if (def.variants && !def.variants.some(v => v[0] === S.trVar)) S.trVar = def.variants[0][0];
@@ -1553,6 +1638,8 @@ const A = {
   reportBy: d => { const s = L.spiele.find(x => x.heim + '|' + x.gast === d.v); if (s && s.bericht) { S.report = s.bericht; window.scrollTo(0, 0) } else toast('Der WDV hat die Einzel zu diesem Spiel noch nicht eingetragen, nur das Endergebnis. Sie kommen automatisch, sobald sie online sind.') },
   rback: () => { S.report = null },
   lplayer: d => { S.lplayer = d.v; window.scrollTo(0, 0) },
+  availToggle: d => { const av = LS.get('darts.avail', null), r = +d.r, ns = av && av.runde === r ? av.names : []; LS.set('darts.avail', { runde: r, names: ns.includes(d.v) ? ns.filter(n => n !== d.v) : [...ns, d.v] }) },
+  availClear: d => LS.set('darts.avail', { runde: +d.r, names: [] }),
   lplayerGo: d => { S.tab = 'liga'; S.lplayer = d.v; window.scrollTo(0, 0) },
   lback: () => { S.lplayer = null },
   lsort: d => S.lsort = d.v, lfilter: d => S.lfilter = d.v,
@@ -1644,21 +1731,21 @@ const A = {
   fixLast: () => { const m = S.live; Store.del('matches', m.id); delete m.done; delete m.stats; m.winner = null; m.finishedAt = null; m.bot ? undoWithBot(m) : undoMatch(m); saveLive() },
   trSel: d => { S.trSel = d.v; S.trVar = null }, trVar: d => S.trVar = d.v, trPid: d => S.trPid = d.v,
   trStart: () => { const def = TR[S.trSel]; S.tr = { id: uid(), mode: S.trSel, variant: def.variants ? S.trVar : null, pid: S.trPid, st: def.init(), log: [], ...withGear() }; S.entry = ''; saveTr(); window.scrollTo(0, 0) },
-  trIn: d => trInput(S.tr, d.v),
+  trIn: d => { S.abortAsk = false; trInput(S.tr, d.v) },
   trQuick: d => { S.entry = d.v; A.trOk() },
   trOk: () => { const v = +S.entry || 0; S.entry = ''; if (v > 180 || BAD_VISIT.includes(v)) return toast(v + ' ist mit 3 Darts nicht möglich.'); trInput(S.tr, v) },
   trUndo: () => { const t = S.tr; if (t.log.length) { t.st = t.log.pop(); saveTr() } },
-  trAbort: () => { S.tr = null; LS.del('darts.trlive') },
+  trAbort: () => { if (S.tr && S.tr.log.length && !S.abortAsk) { S.abortAsk = true; return } S.abortAsk = false; S.tr = null; LS.del('darts.trlive') },
   trAgain: () => { const t = S.tr; S.tr = { id: uid(), mode: t.mode, variant: t.variant, pid: t.pid, st: TR[t.mode].init(), log: [] }; saveTr() },
   trClose: () => { S.tr = null; LS.del('darts.trlive') },
   planStart: d => { if (!S.trPid) return; S.plan = { id: uid(), variant: d.v, pid: S.trPid, date: Date.now(), steps: ['warm', ...PLAN.filter(g => planRounds(g, d.v)).map(g => g.id)], i: 0, cur: [], results: {}, warmEnd: null, goals: { power: powerGoal(S.trPid) }, ...withGear() }; S.entry = ''; S.planAbortAsk = false; savePlan(); window.scrollTo(0, 0) },
   planWarm: d => { S.plan.warmEnd = Date.now() + d.v * 60000; savePlan() },
   planNext: () => { S.plan.cur = []; planStep(S.plan); window.scrollTo(0, 0) },
-  planIn: d => planInput(S.plan, +d.v),
+  planIn: d => { S.skipAsk = false; planInput(S.plan, +d.v) },
   planQuick: d => { S.entry = d.v; A.planOk() },
   planOk: () => { const v = +S.entry || 0; S.entry = ''; if (v > 180 || BAD_VISIT.includes(v)) return toast(v + ' ist mit 3 Darts nicht möglich.'); planInput(S.plan, v) },
-  planUndo: () => { S.plan.cur.pop(); savePlan() },
-  planSkip: () => { S.plan.cur = []; S.plan.bo = null; planStep(S.plan); window.scrollTo(0, 0) },
+  planUndo: () => { S.skipAsk = false; S.plan.cur.pop(); savePlan() },
+  planSkip: () => { if (!S.skipAsk) { S.skipAsk = true; return } S.skipAsk = false; S.plan.cur = []; S.plan.bo = null; planStep(S.plan); window.scrollTo(0, 0) },
   planBo: d => { S.plan.bo = { ...(S.plan.bo || {}), win: d.v === '1', avg: ($('#boavg') || {}).value } ; savePlan() },
   planBoSave: () => { const p = S.plan, bo = p.bo || {}, avg = parseFloat(($('#boavg').value || '').replace(',', '.')); if (bo.win == null) return toast('Bitte Gewonnen oder Verloren wählen.'); if (isNaN(avg)) return toast('Bitte deinen Average eintragen.'); p.cur = [avg]; p.bo = null; planGoals(p); planFinishGame(p, planGame('bo11'), bo11Pts(bo.win, avg, goalOf(p, 'power'))) },
   planAbort: () => S.planAbortAsk = true, planAbortNo: () => S.planAbortAsk = false,
