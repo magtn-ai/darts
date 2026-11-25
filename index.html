@@ -124,8 +124,13 @@ details.extra>*+*{margin-top:10px}
 .gstat span{font-size:11px;color:var(--fog);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gsel{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .gsel select{width:100%}
+textarea{width:100%;border:1px solid var(--iron);background:var(--charcoal);border-radius:var(--r-sm);padding:10px 12px;font:inherit;color:inherit;resize:vertical}
+.ilist{display:flex;flex-direction:column;gap:8px}
+.idea p{margin:0 0 8px;white-space:pre-wrap;overflow-wrap:anywhere}
+.idea.done p{color:var(--fog);text-decoration:line-through}
 input[type=text],input[type=password],select{height:40px;border:1px solid var(--iron);background:var(--charcoal);border-radius:var(--r-sm);padding:0 12px;min-width:0}
-input::placeholder{color:var(--fog)}
+input::placeholder,textarea::placeholder{color:var(--fog)}
+.chip.danger{border-color:var(--neg);color:var(--neg)}
 label.f{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--fog)}
 .link{border:0;background:none;color:var(--ice);font-weight:500;padding:0;align-self:flex-start;font-size:14px}
 .tbl{overflow-x:auto;border-radius:var(--r-lg);background:var(--charcoal);box-shadow:var(--ring)}
@@ -270,7 +275,7 @@ nav.tabs svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1
     <button class="ibtn" id="refreshBtn" data-act="refreshLiga" aria-label="Liga-Daten aktualisieren"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
     <button class="ibtn" data-act="menu" aria-label="Menü" aria-haspopup="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </header>
-  <div id="menu" class="menu" role="menu" hidden><button role="menuitem" data-act="tab" data-t="setup">Dart-Setup<span>Sets und Teile</span></button><button role="menuitem" data-act="tab" data-t="settings">Einstellungen<span>Darstellung, Team, Daten, App-Schlüssel</span></button></div>
+  <div id="menu" class="menu" role="menu" hidden><button role="menuitem" data-act="tab" data-t="setup">Dart-Setup<span>Sets und Teile</span></button><button role="menuitem" data-act="tab" data-t="ideas">Ideen<span>Einfälle für die App sammeln</span></button><button role="menuitem" data-act="tab" data-t="settings">Einstellungen<span>Darstellung, Team, Daten, App-Schlüssel</span></button></div>
   <main id="app"><section><h2>Lade …</h2></section></main>
 </div>
 <nav class="tabs" id="nav">
@@ -311,9 +316,9 @@ let toastT;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2800) }
 
 // ---------- Speicher: Spieler, Spiele, Trainings – lokal sofort, dann über den Helfer auf alle Geräte
-const COLS = ['profiles', 'matches', 'trainings'];
+const COLS = ['profiles', 'matches', 'trainings', 'ideas'];
 const Store = {
-  data: { profiles: {}, matches: {}, trainings: {} }, key: LS.get('darts.key', ''), state: 'lokal', outbox: LS.get('darts.outbox', []), flushing: false,
+  data: { profiles: {}, matches: {}, trainings: {}, ideas: {} }, key: LS.get('darts.key', ''), state: 'lokal', outbox: LS.get('darts.outbox', []), flushing: false,
   init() { COLS.forEach(c => this.data[c] = LS.get('darts.' + c, {})); this.sync() },
   async sync() {
     if (!this.key) { this.state = 'nokey'; softRender(); return }
@@ -1480,6 +1485,16 @@ function vGearLib() {
     <p class="muted small" style="margin:0">Aus diesen Teilen stellst du oben deine Sets zusammen. Entfernst du ein Teil, bleibt es bei alten Spielen und bestehenden Sets trotzdem gespeichert.</p></section>`;
 }
 // Eigene Seite fürs Dart-Setup (Zahnrad → Dart-Setup)
+// Ideen: nur sammeln, umgesetzt wird erst nach Absprache im Chat
+function vIdeas() {
+  const xs = Object.entries(Store.data.ideas || {}).map(([id, o]) => ({ id, ...o })).sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0) || b.date - a.date);
+  const open = xs.filter(x => !x.done).length;
+  return `<section><button class="link" data-act="tab" data-t="${S.back || 'liga'}">← Zurück</button><h2>Ideen</h2>
+      <p class="muted small" style="margin:0">Hier sammelst du Einfälle für die App, auch unterwegs am Handy. Nichts davon wird von selbst umgesetzt. Wenn du so weit bist, sag Claude im Chat „schau dir meine App-Ideen an“.</p></section>
+    <section><textarea id="idea" rows="3" placeholder="Was soll die App können oder anders machen?">${esc(S.ideaDraft || '')}</textarea><button class="btn primary block" data-act="ideaAdd">Idee speichern</button></section>
+    <section><h3>Gesammelt${xs.length ? ' · ' + open + ' offen' : ''}</h3>${xs.length ? `<div class="ilist">${xs.map(x => `<div class="card idea ${x.done ? 'done' : ''}"><p>${esc(x.text)}</p>
+        <div class="row"><span class="cap grow">${new Date(x.date).toLocaleDateString('de-AT')}${x.done ? ' · erledigt' : ''}</span><button class="chip" data-act="ideaDone" data-v="${x.id}">${x.done ? 'Wieder offen' : 'Erledigt'}</button><button class="chip ${S.delAsk === 'idea:' + x.id ? 'danger' : ''}" data-act="ideaDel" data-v="${x.id}">${S.delAsk === 'idea:' + x.id ? 'Wirklich löschen?' : 'Löschen'}</button></div></div>`).join('')}</div>` : '<p class="muted small" style="margin:0">Noch keine Ideen notiert.</p>'}</section>`;
+}
 function vSetup() {
   return `<section><button class="link" data-act="tab" data-t="${S.back || 'liga'}">← Zurück</button><h2>Dart-Setup</h2></section>${vGearLib()}`;
 }
@@ -1506,7 +1521,7 @@ function vSettings() {
 function render() {
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.t === S.tab));
   $('#menu').hidden = !S.menu;
-  const views = { liga: vLiga, spielen: vSpielen, training: vTraining, stats: vStats, settings: vSettings, setup: vSetup };
+  const views = { liga: vLiga, spielen: vSpielen, training: vTraining, stats: vStats, settings: vSettings, setup: vSetup, ideas: vIdeas };
   $('#app').innerHTML = views[S.tab]();
   // Laufendes Spiel: kompakte Ansicht ohne Kopfzeile, damit Stand und Eingabe auf einen Bildschirm passen
   document.body.classList.toggle('live', S.tab === 'spielen' && !!S.live && !S.live.done);
@@ -1517,7 +1532,7 @@ function render() {
 }
 function softRender() {
   const a = document.activeElement;
-  if (a && (a.tagName === 'INPUT' || a.tagName === 'SELECT')) return;
+  if (a && (a.tagName === 'INPUT' || a.tagName === 'SELECT' || a.tagName === 'TEXTAREA')) return;
   if ((S.tab === 'spielen' && S.live && !S.live.done) || (S.tab === 'training' && ((S.tr && !S.tr.done) || (S.plan && S.plan.i < S.plan.steps.length)))) return;
   render();
 }
@@ -1529,7 +1544,7 @@ function startBot(pid, legs, planId) {
   S.tab = 'spielen'; LS.set('darts.tab', 'spielen'); window.scrollTo(0, 0);
 }
 const A = {
-  tab: d => { if (d.t === 'settings' || d.t === 'setup') { if (S.tab !== 'settings' && S.tab !== 'setup') S.back = S.tab } else LS.set('darts.tab', d.t); S.tab = d.t; S.menu = false; S.report = null; S.lplayer = null; S.statMatch = null; window.scrollTo(0, 0) },
+  tab: d => { const sub = t => ['settings', 'setup', 'ideas'].includes(t); if (sub(d.t)) { if (!sub(S.tab)) S.back = S.tab } else LS.set('darts.tab', d.t); S.tab = d.t; S.menu = false; S.report = null; S.lplayer = null; S.statMatch = null; window.scrollTo(0, 0) },
   refreshLiga: () => { refreshLiga(); Store.sync() },
   liga: d => { S.liga = d.v; if (d.v === 'team') S.viewTeam = null },
   team: d => { S.liga = 'team'; S.viewTeam = d.v || null; S.report = null; S.lplayer = null; window.scrollTo(0, 0) },
@@ -1657,6 +1672,9 @@ const A = {
   setGoal: d => { const v = parseInt($('#pgoal').value, 10); if (!(v >= 30 && v <= 120)) return toast('Bitte ein Ziel zwischen 30 und 120 eingeben.'); Store.put('profiles', d.v, { ...clone(Store.data.profiles[d.v]), powerGoal: v, powerGoalSince: Date.now() }); toast('Scoring-Ziel: ' + v) },
   delAsk: d => S.delAsk = d.v, delNo: () => S.delAsk = null,
   delYes: d => { Store.del('profiles', d.v); S.setup.players = S.setup.players.filter(x => x !== d.v); LS.set('darts.setup', S.setup); S.statPid = null; S.delAsk = null; toast('Spieler gelöscht') },
+  ideaAdd: () => { const t = $('#idea').value.trim(); if (!t) return toast('Erst eine Idee eintippen.'); Store.put('ideas', uid(), { text: t, date: Date.now() }); S.ideaDraft = ''; toast('Idee gespeichert') },
+  ideaDone: d => { const o = Store.data.ideas[d.v]; if (!o) return; const { done, ...rest } = o; Store.put('ideas', d.v, o.done ? rest : { ...rest, done: Date.now() }) },
+  ideaDel: d => { if (S.delAsk === 'idea:' + d.v) { Store.del('ideas', d.v); S.delAsk = null; toast('Idee gelöscht') } else S.delAsk = 'idea:' + d.v },
   exportData: () => {
     const data = { app: 'dirty-checkers-darts', exportiert: new Date().toISOString(), profiles: Store.data.profiles, matches: Store.data.matches, trainings: Store.data.trainings };
     const a = document.createElement('a');
@@ -1680,6 +1698,8 @@ document.addEventListener('click', e => {
   const sel = `[data-act="${b.dataset.act}"]` + (b.dataset.v != null ? `[data-v="${CSS.escape(b.dataset.v)}"]` : '');
   const nb = $('#app').querySelector(sel); if (nb) { nb.classList.remove('flash'); void nb.offsetWidth; nb.classList.add('flash') }
 });
+// Entwurf einer Idee merken, damit ein Neuzeichnen ihn nicht verliert
+document.addEventListener('input', e => { if (e.target.id === 'idea') S.ideaDraft = e.target.value });
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.chg === 'wdvlink') { const pid = el.dataset.v; Store.put('profiles', pid, { ...clone(Store.data.profiles[pid]), wdv: el.value || null }); toast(el.value ? 'Verknüpft mit ' + el.value : 'Verknüpfung entfernt'); render() }
