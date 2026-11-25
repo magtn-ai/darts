@@ -847,10 +847,13 @@ function planSaveDoc(p) {
   const ids = Object.keys(p.results); if (!ids.length) return;
   planGoals(p);
   const punkte = ids.reduce((a, k) => a + p.results[k].fe, 0), ziel = ids.reduce((a, k) => a + goalOf(p, k), 0);
-  Store.put('trainings', p.id, { mode: 'plan', variant: p.variant, pid: p.pid, date: p.date, results: clone(p.results), goals: clone(p.goals), punkte, ziel, metric: ziel ? punkte / ziel * 100 : 0, ...(p.end ? { dauer: p.end - p.date } : {}), ...(p.gear ? { gear: p.gear } : {}) });
+  Store.put('trainings', p.id, { mode: 'plan', variant: p.variant, pid: p.pid, date: p.date, results: clone(p.results), goals: clone(p.goals), punkte, ziel, metric: ziel ? punkte / ziel * 100 : 0, ...(p.end ? { dauer: planElapsed(p) } : {}), ...(p.gear ? { gear: p.gear } : {}) });
 }
 const durFmt = ms => { if (ms == null) return '–'; const m = Math.round(ms / 60000); return m < 60 ? m + ' min' : Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0') + ' h' };
 // Ø Dauer pro Variante aus den gestoppten Sessions (null, solange keine gestoppt ist)
+// Trainingszeit ohne Pausen
+const planElapsed = p => (p.end || p.pausedAt || Date.now()) - p.date - (p.pauseMs || 0);
+const clockFmt = ms => { const t = Math.max(0, Math.round(ms / 1000)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0') };
 const planAvgDur = (pid, variant) => { const d = planSessions(pid).filter(s => s.variant === variant && s.dauer > 60000).map(s => s.dauer); return d.length ? { ms: d.reduce((a, b) => a + b, 0) / d.length, n: d.length } : null };
 // Zielerreichung neu rechnen (Ziele aus dem Plan aktuell, Scoring-Ziel wie damals gespeichert)
 const planPct = s => { const ids = Object.keys(s.results).filter(planGame), z = ids.reduce((a, k) => a + goalOf(s, k), 0); return z ? ids.reduce((a, k) => a + s.results[k].fe, 0) / z * 100 : 0 };
@@ -870,7 +873,8 @@ function planCharts(pid) {
   return `<div class="card"><div class="bar"><span>Zielerreichung</span><span class="cap">${ss.length} Sessions</span></div>${chart(ss.map(s => ({ x: dShort(s.date), y: planPct(s) })), { h: 150, label: 'Zielerreichung Trainingsplan', fy: v => fmt(v, 0) + '%', goal: 100 })}</div>
     ${per.map(({ g, pts }) => `<div class="card"><div class="bar"><span>${esc(g.name)}</span><span class="cap">Ziel ${curGoal(g.id, pid)} · zuletzt ${feFmt(pts[pts.length - 1].y)} · Best ${feFmt(Math.max(...pts.map(p => p.y)))}</span></div>${chart(pts, { h: 120, label: g.name, fy: v => fmt(v, 0), goal: pts.map(p => p.goal) })}</div>`).join('')}`;
 }
-setInterval(() => { const el = document.getElementById('warmclock'); if (el && S.plan && S.plan.warmEnd) { const s = Math.max(0, Math.round((S.plan.warmEnd - Date.now()) / 1000)); el.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); if (!s) el.style.color = 'var(--ice)' } }, 1000);
+setInterval(() => { const pc = document.getElementById('pauseclock'); if (pc && S.plan && S.plan.pausedAt) pc.textContent = clockFmt(Date.now() - S.plan.pausedAt); }, 1000);
+setInterval(() => { const el = document.getElementById('warmclock'); if (el && S.plan && S.plan.warmEnd && !S.plan.pausedAt) { const s = Math.max(0, Math.round((S.plan.warmEnd - Date.now()) / 1000)); el.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); if (!s) el.style.color = 'var(--ice)' } }, 1000);
 
 // ---------- Diagramm
 function chart(pts, { h = 170, fy = v => fmt(v, 1), label = 'Verlauf', goal = null } = {}) {
@@ -1271,11 +1275,11 @@ function vMatchEnd(m) {
 // ---------- Ansichten: Training
 function vPlan() {
   const p = S.plan, kurz = p.variant === 'kurz'; planGoals(p);
-  const head = `<div class="bar"><span class="cap">Trainingsplan ${PVAR[p.variant]} · ${esc(pname(p.pid))} · ${Math.min(p.i + 1, p.steps.length)}/${p.steps.length} · ⏱ ${durFmt(Date.now() - p.date)}</span><button class="chip" data-act="planAbort">Beenden</button></div>
+  const head = `<div class="bar"><span class="cap">Trainingsplan ${PVAR[p.variant]} · ${esc(pname(p.pid))} · ${Math.min(p.i + 1, p.steps.length)}/${p.steps.length} · ⏱ ${durFmt(planElapsed(p))}</span><span class="row" style="flex-wrap:nowrap">${p.pausedAt ? '' : '<button class="chip" data-act="planPause">Pause</button>'}<button class="chip" data-act="planAbort">Beenden</button></span></div>
     ${S.planAbortAsk ? `<div class="note warn row"><span class="grow">Training beenden? Fertige Spiele bleiben gespeichert.</span><button class="btn danger" data-act="planAbortYes">Beenden</button><button class="btn" data-act="planAbortNo">Weiter</button></div>` : ''}`;
   if (p.i >= p.steps.length) {
     const ids = Object.keys(p.results), punkte = ids.reduce((a, k) => a + p.results[k].fe, 0), ziel = ids.reduce((a, k) => a + goalOf(p, k), 0);
-    return `<section><span class="cap">Trainingsplan ${PVAR[p.variant]} · ${esc(pname(p.pid))} · Dauer ${durFmt(p.end ? p.end - p.date : null)}</span><h2>${fmt(ziel ? punkte / ziel * 100 : 0, 0)} % vom Ziel</h2>
+    return `<section><span class="cap">Trainingsplan ${PVAR[p.variant]} · ${esc(pname(p.pid))} · Dauer ${durFmt(p.end ? planElapsed(p) : null)}</span><h2>${fmt(ziel ? punkte / ziel * 100 : 0, 0)} % vom Ziel</h2>
       ${p.raised ? `<div class="note">Stark! Dein Scoring-Ziel steigt auf <b>${p.raised}</b>. Die Best-of-11-Stufen ziehen mit (${p.raised - 15}/${p.raised - 10}/${p.raised - 5}/${p.raised}).</div>` : ''}
       <div class="tbl"><table><thead><tr><th>Spiel</th><th class="r">Punkte</th><th class="r">Hochgerechnet</th><th class="r">Ziel</th></tr></thead><tbody>
       ${ids.map(k => { const g = planGame(k), r = p.results[k]; return `<tr><td>${esc(g.name)}</td><td class="n">${r.pts}${g.input === 'visit' || g.input === 'bo11' ? '' : ' / ' + r.played}</td><td class="n ${r.fe >= goalOf(p, k) ? 'good' : ''}">${feFmt(r.fe)}</td><td class="n">${goalOf(p, k)}</td></tr>` }).join('')}
@@ -1283,6 +1287,9 @@ function vPlan() {
       <p class="muted small" style="margin:0">Gespeichert. Die Entwicklung siehst du unter Statistik.</p>
       <button class="btn primary block" data-act="planClose">Fertig</button></section>`;
   }
+  if (p.pausedAt) return `<section>${head}<h2>Pause</h2><p class="muted" style="margin:0">Die Trainingszeit steht still. Du kannst die App ruhig schließen, beim nächsten Öffnen geht es genau hier weiter.</p>
+      <p class="cap" style="text-align:center;margin:0">Pause seit</p><div class="tbig" id="pauseclock">${clockFmt(Date.now() - p.pausedAt)}</div>
+      <button class="btn primary block big" data-act="planResume">Weiter trainieren</button></section>`;
   const step = p.steps[p.i];
   if (step === 'warm') {
     const min = kurz ? 3 : p.variant === 'medium' ? 5 : 10;
@@ -1739,6 +1746,8 @@ const A = {
   trAgain: () => { const t = S.tr; S.tr = { id: uid(), mode: t.mode, variant: t.variant, pid: t.pid, st: TR[t.mode].init(), log: [] }; saveTr() },
   trClose: () => { S.tr = null; LS.del('darts.trlive') },
   planStart: d => { if (!S.trPid) return; S.plan = { id: uid(), variant: d.v, pid: S.trPid, date: Date.now(), steps: ['warm', ...PLAN.filter(g => planRounds(g, d.v)).map(g => g.id)], i: 0, cur: [], results: {}, warmEnd: null, goals: { power: powerGoal(S.trPid) }, ...withGear() }; S.entry = ''; S.planAbortAsk = false; savePlan(); window.scrollTo(0, 0) },
+  planPause: () => { const p = S.plan; if (!p || p.pausedAt || p.i >= p.steps.length) return; p.pausedAt = Date.now(); S.planAbortAsk = false; S.skipAsk = false; savePlan(); window.scrollTo(0, 0) },
+  planResume: () => { const p = S.plan; if (!p || !p.pausedAt) return; const d = Date.now() - p.pausedAt; p.pauseMs = (p.pauseMs || 0) + d; if (p.warmEnd) p.warmEnd += d; delete p.pausedAt; savePlan() },
   planWarm: d => { S.plan.warmEnd = Date.now() + d.v * 60000; savePlan() },
   planNext: () => { S.plan.cur = []; planStep(S.plan); window.scrollTo(0, 0) },
   planIn: d => { S.skipAsk = false; planInput(S.plan, +d.v) },
