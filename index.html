@@ -1045,26 +1045,39 @@ function luEval(picks, ou, st) {
   return { sets, win, draw, loss: 1 - win - draw, exp: sets.reduce((a, x) => a + x.p, 0) };
 }
 // Beste Aufstellung aus den verfügbaren Spielern: im Einzel jeder höchstens einmal, in jedem Doppel-Block (3+4, 7+8) auch.
-function luPlan(sel, ou) {
-  const st = luStrength(), picks = {}, chance = (who, nr) => luEval({ [nr]: who }, ou, st).sets.find(x => x.nr === nr).p;
-  const sNr = LU_SETS.filter(x => x[1] === 'einzel').map(x => x[0]);
-  let best = null;
-  const goS = (i, used, sum, acc) => {
-    if (i === sNr.length) { if (!best || sum > best.sum) best = { sum, acc }; return }
-    const c = sel.filter(n => !used.includes(n)); if (!c.length) return goS(i + 1, used, sum, [...acc, null]);
-    c.forEach(n => goS(i + 1, [...used, n], sum + chance(n, sNr[i]), [...acc, n]));
+// Mit everyone = true kommt jeder Ausgewählte mindestens einmal dran (Einzel oder Doppel), sofern die 12 Plätze reichen.
+// Gesucht wird die höchste Summe der Set-Chancen: Einzel-Zuordnungen und Doppel-Kombinationen werden je Spieler-Menge
+// (Bitmaske) vorberechnet, dann wird die beste Kombination gesucht, die alle abdeckt.
+function luPlan(sel, ou, everyone) {
+  const st = luStrength(), memo = {};
+  const chance = (who, nr) => { const k = nr + '|' + who; return k in memo ? memo[k] : (memo[k] = luEval({ [nr]: who }, ou, st).sets.find(x => x.nr === nr).p) };
+  const bit = {}; sel.forEach((n, i) => bit[n] = 1 << i);
+  const mask = who => who ? who.split(' / ').reduce((m, n) => m | bit[n], 0) : 0;
+  const full = (1 << sel.length) - 1, need = everyone && sel.length <= 12 ? full : 0;
+  // Einzel: alle Zuordnungen, je Spieler-Menge die beste
+  const sNr = LU_SETS.filter(x => x[1] === 'einzel').map(x => x[0]), single = new Map();
+  const goS = (i, m, sum, acc) => {
+    if (i === sNr.length) { const b = single.get(m); if (!b || sum > b.sum) single.set(m, { sum, acc }); return }
+    const c = sel.filter(n => !(m & bit[n])); if (!c.length) return goS(i + 1, m, sum, [...acc, null]);
+    c.forEach(n => goS(i + 1, m | bit[n], sum + chance(n, sNr[i]), [...acc, n]));
   };
-  goS(0, [], 0, []); sNr.forEach((nr, i) => picks[nr] = best.acc[i]);
+  goS(0, 0, 0, []);
+  // Doppel: je Block alle Kombinationen, dann beide Blöcke zusammen, je Spieler-Menge die beste
   const pairs = sel.flatMap((a, i) => sel.slice(i + 1).map(b => [a, b].sort((x, y) => x.localeCompare(y, 'de')).join(' / ')));
-  [[3, 4], [7, 8]].forEach(bl => {
-    let bb = null;
-    const go = (i, used, sum, acc) => {
-      if (i === bl.length) { if (!bb || sum > bb.sum) bb = { sum, acc }; return }
-      const c = pairs.filter(p => !p.split(' / ').some(n => used.includes(n))); if (!c.length) return go(i + 1, used, sum, [...acc, null]);
-      c.forEach(p => go(i + 1, [...used, ...p.split(' / ')], sum + chance(p, bl[i]), [...acc, p]));
+  const block = bl => { const out = [];
+    const go = (i, m, sum, acc) => {
+      if (i === bl.length) { out.push({ m, sum, acc }); return }
+      const c = pairs.filter(p => !(mask(p) & m)); if (!c.length) return go(i + 1, m, sum, [...acc, null]);
+      c.forEach(p => go(i + 1, m | mask(p), sum + chance(p, bl[i]), [...acc, p]));
     };
-    go(0, [], 0, []); bl.forEach((nr, i) => picks[nr] = bb.acc[i]);
-  });
+    go(0, 0, 0, []); return out };
+  const best = (xs) => { const b = new Map(); xs.forEach(x => { const o = b.get(x.m); if (!o || x.sum > o.sum) b.set(x.m, x) }); return [...b.values()] };
+  const b1 = best(block([3, 4])), b2 = best(block([7, 8])), dbl = new Map();
+  b1.forEach(x => b2.forEach(y => { const m = x.m | y.m, o = dbl.get(m), sum = x.sum + y.sum; if (!o || sum > o.sum) dbl.set(m, { sum, acc: [...x.acc, ...y.acc] }) }));
+  let top = null;
+  single.forEach((s, ms) => dbl.forEach((d, md) => { if (((ms | md) & need) !== need) return; const sum = s.sum + d.sum; if (!top || sum > top.sum) top = { sum, s, d } }));
+  if (!top) return luPlan(sel, ou, false);
+  const picks = {}; sNr.forEach((nr, i) => picks[nr] = top.s.acc[i]); [3, 4, 7, 8].forEach((nr, i) => picks[nr] = top.d.acc[i]);
   return luEval(picks, ou, st);
 }
 function vPlanner(team, next) {
@@ -1078,7 +1091,9 @@ function vPlanner(team, next) {
   let out = '';
   if (sel.length < 4) out = `<p class="muted small" style="margin:0">Tippe an, wer am ${esc(next.datum)} spielen kann. Ab 4 Spielern kommt der Vorschlag.</p>`;
   else {
-    const r = luPlan(sel, ou);
+    const r = luPlan(sel, ou, true), free = luPlan(sel, ou, false);
+    const cost = Math.round((free.win + free.draw / 2 - r.win - r.draw / 2) * 100);
+    const games = sel.map(n => [n, r.sets.filter(x => x.who && x.who.split(' / ').includes(n)).length]);
     // Vergleich mit der Aufstellung, die ihr zuletzt meistens gespielt habt, falls alle davon können
     const usual = {}; (lu ? lu.slots : []).forEach(x => usual[x.nr] = x.pick);
     const canUsual = lu && Object.values(usual).every(w => w && w.split(' / ').every(n => sel.includes(n)));
@@ -1086,6 +1101,7 @@ function vPlanner(team, next) {
     const bench = sel.filter(n => !r.sets.some(x => x.who && x.who.split(' / ').includes(n)));
     out = `<div class="kpis"><div class="kpi"><b style="color:var(--ice)">${pc(r.win)}</b><span>Sieg</span></div><div class="kpi"><b>${pc(r.draw)}</b><span>Unentschieden</span></div><div class="kpi"><b>${pc(r.loss)}</b><span>Niederlage</span></div></div>
       <p class="muted small" style="margin:0">Erwartet etwa <span class="mono" style="color:var(--paper)">${fmt(r.exp, 1)} : ${fmt(8 - r.exp, 1)}</span> Sets.${base ? (Math.abs(diff) >= 1 ? ` Gegenüber eurer üblichen Aufstellung ${diff > 0 ? '+' : ''}${diff} Prozentpunkte bei den erwarteten Matchpunkten.` : ' Das entspricht ungefähr eurer üblichen Aufstellung.') : ''}${bench.length ? ` Nicht eingeplant: ${bench.map(esc).join(', ')}.` : ''}</p>
+      <p class="muted small" style="margin:0">Einsätze: ${games.map(([n, k]) => `${esc(n)} <span class="mono" style="color:var(--paper)">${k}</span>`).join(' · ')}. Jeder Ausgewählte spielt mindestens einmal${cost >= 1 ? `, das kostet gegenüber der rein stärksten Aufstellung etwa ${cost} Prozentpunkte bei den erwarteten Matchpunkten` : ', und es kostet praktisch nichts an Siegchance'}.</p>
       <div class="list">${r.sets.map(x => `<div class="li mu"><span class="cap mu-n">Set ${x.nr} · ${x.typ === 'einzel' ? 'Einzel' : 'Doppel'} · <span style="color:${tone(x.p)}">${pc(x.p)} Siegchance</span></span>
         <div class="mu-row"><div class="mu-p"><span>${nm(x.who)}</span>${x.who ? `<span class="cap">Stärke ${fmt(st(x.who), 1)}</span>` : ''}</div><span class="mu-vs">vs.</span>
         <div class="mu-p r">${x.opp ? `<span>${esc(x.opp)}</span><span class="cap">${x.oppPct} % sicher</span>` : '<span class="muted">unbekannt</span>'}</div></div></div>`).join('')}</div>`;
