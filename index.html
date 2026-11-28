@@ -550,7 +550,11 @@ const CO_STD = {};
 const bestOut = (rem, left = 3) => { const t = CO_STD[rem]; return t && t.length <= left ? t : checkout(rem, left) };
 
 // ---------- Bot-Gegner: wirft Dart für Dart, Trefferquoten hängen am eingestellten Average
-// (per Simulation abgestimmt: Ø 40 → ca. 39, Ø 60 → ca. 59, Ø 80 → ca. 79 über viele Legs)
+// (per Simulation abgestimmt: Ø 40 → ca. 39, Ø 60 → ca. 59, Ø 80 → ca. 79 über ganze Legs)
+// Im Spiel zählen auch Legs, die man nicht auscheckt, und die heben den Schnitt (die zähe Checkout-Phase fehlt).
+// Gegen einen gleich starken Gegner zeigt die Statistik so etwa Ø × 1,08 + 1,5. botLevel rechnet das heraus,
+// damit der Bot im Spiel ungefähr den eingestellten Average wirft, so wie dein eigener gemessen wird.
+const botLevel = avg => (avg - 1.5) / 1.08;
 const BOT = 'bot';
 const BOARD = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
 const nbr = n => { const i = BOARD.indexOf(n); return BOARD[(i + (Math.random() < .5 ? 1 : 19)) % 20] };
@@ -595,7 +599,7 @@ function botTick() {
   botT = null; const m = S.live;
   if (!m || m.done || S.tab !== 'spielen' || m.players[turnOf(m, curLeg(m))] !== BOT) return;
   const before = remOf(m, curLeg(m), turnOf(m, curLeg(m))) - m.pending.reduce((a, x) => a + dartVal(x), 0);
-  x01Dart(m, botDart(before, 3 - m.pending.length, m.bot.avg));
+  x01Dart(m, botDart(before, 3 - m.pending.length, botLevel(m.bot.avg)));
   render();
 }
 // Zurück mit Bot: dessen Würfe mit zurücknehmen, bis wieder ein eigener Dart weg ist
@@ -792,22 +796,22 @@ const trFy = mode => v => mode === 'dbl' ? fmt(v, 0) + '%' : fmt(v, mode === 'sc
 const PLAN = [
   { id: 'bull', name: 'Bull-Shooter', rule: '3 Darts pro Runde auf Bull. Jedes Bulls-Eye = 1 Punkt.', rounds: 20, medium: 15, short: 10, goal: 10, input: 'count', target: () => 'Bull' },
   { id: 'co1', name: 'Check-Outs I', rule: '3 Darts pro Zahl, von 41 aufwärts, immer +1. Check-Out = 1 Punkt.', rounds: 40, medium: 30, short: 20, goal: 10, input: 'co', target: n => 41 + n },
-  { id: 'power', name: 'Power-Scoring', rule: 'Aufnahmen auf Punkte. Der Average (aufgerundet) ist die Punktzahl.', rounds: 34, medium: 20, short: 10, goal: 67, input: 'visit' }, // persönliches Ziel (Original-Plan: 90)
+  { id: 'power', name: 'Power-Scoring', rule: 'Aufnahmen auf Punkte. Der Average (aufgerundet) ist die Punktzahl.', rounds: 34, medium: 20, short: 10, goal: 60, input: 'visit' }, // persönliches Ziel (Original-Plan: 90)
   { id: 'co2', name: 'Check-Outs II', rule: '3 Darts pro Zahl, von 81 aufwärts, immer +1. Check-Out = 1 Punkt.', rounds: 40, medium: 20, short: 0, goal: 10, input: 'co', target: n => 81 + n },
   { id: 'co25', name: '25 Check-Out', rule: '3 Darts, um Rest 25 zu checken. Check-Out = 1 Punkt.', rounds: 20, medium: 15, short: 10, goal: 10, input: 'co', target: () => 25 },
   { id: 'switch', name: 'Switch', rule: 'Je ein Dart auf T20, T19, T18. Jedes Triple = 1 Punkt. Ein Ausreißer (Dart neben dem Zielsegment) pro Runde ist erlaubt, ab zwei Ausreißern zählt die Runde 0.', rounds: 20, medium: 15, short: 10, goal: 10, input: 'switch', target: () => 'T20 · T19 · T18' },
   { id: 'd40', name: '40', rule: '40 / 20 / 10. Pro getroffenem Doppel 1 Punkt.', rounds: 20, medium: 15, short: 10, goal: 20, input: 'count', target: () => '40' },
   { id: 'd32', name: '32', rule: '32 / 16 / 8. Pro getroffenem Doppel 1 Punkt.', rounds: 20, medium: 10, short: 0, goal: 20, input: 'count', target: () => '32' },
   { id: 'd24', name: '24', rule: '24 / 12 / 6. Pro getroffenem Doppel 1 Punkt.', rounds: 20, medium: 10, short: 0, goal: 20, input: 'count', target: () => '24' },
-  { id: 'bo11', name: 'Best of 11 (HNQ Lvl. 7)', rule: 'Sieg = 5 Punkte. Dazu für den Average: ab 52 = 2, ab 57 = 3, ab 62 = 4, ab 67 = 5 Punkte.', rounds: 1, medium: 0, short: 0, goal: 8, input: 'bo11' }
+  { id: 'bo11', name: 'Best of 11 (HNQ Lvl. 7)', rule: 'Sieg = 5 Punkte. Dazu für den Average: ab 45 = 2, ab 50 = 3, ab 55 = 4, ab 60 = 5 Punkte.', rounds: 1, medium: 0, short: 0, goal: 8, input: 'bo11' }
 ];
 const planGame = id => PLAN.find(g => g.id === id);
 const planRounds = (g, v) => v === 'kurz' ? g.short : v === 'medium' ? g.medium : g.rounds;
 const PVAR = { voll: 'komplett', medium: 'medium', kurz: 'kurz' };
 const savePlan = () => LS.set('darts.plan', S.plan);
-// Scoring-Ziel wächst mit: pro Spieler gespeichert (Start 67, Original-Plan 90).
+// Scoring-Ziel wächst mit: pro Spieler gespeichert (Start 60, Original-Plan 90).
 // Jede Session merkt sich das Ziel von damals, damit der Verlauf nicht rückwirkend schlechter aussieht.
-const POWER_START = 67;
+const POWER_START = 60;
 const powerGoal = pid => (Store.data.profiles[pid] || {}).powerGoal || POWER_START;
 const curGoal = (k, pid) => k === 'power' ? powerGoal(pid) : planGame(k).goal;
 const goalOf = (s, k) => k === 'power' ? (s.goals && s.goals.power) || POWER_START : planGame(k).goal;
@@ -821,7 +825,7 @@ function checkPowerGoal(pid) {
   Store.put('profiles', pid, { ...clone(pr), powerGoal: G + 3, powerGoalSince: ss[4].date });
   return G + 3;
 }
-// Best-of-11-Average-Stufen hängen am Scoring-Ziel: Ziel −15/−10/−5/±0 → 2/3/4/5 Punkte (bei Ziel 67: 52/57/62/67)
+// Best-of-11-Average-Stufen hängen am Scoring-Ziel: Ziel −15/−10/−5/±0 → 2/3/4/5 Punkte (bei Ziel 60: 45/50/55/60)
 const bo11Pts = (win, avg, pg = POWER_START) => (win ? 5 : 0) + (avg >= pg ? 5 : avg >= pg - 5 ? 4 : avg >= pg - 10 ? 3 : avg >= pg - 15 ? 2 : 0);
 const bo11Rule = pg => `Sieg = 5 Punkte. Dazu für den Average: ab ${pg - 15} = 2, ab ${pg - 10} = 3, ab ${pg - 5} = 4, ab ${pg} = 5 Punkte.`;
 const feFmt = v => v == null ? '–' : fmt(v, v % 1 ? 1 : 0);
